@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 Grazajon Host Panel v2.0 — Multi-Tenant Cloud PaaS Platform
 Termux / Android va Linux VPS uchun to'liq avtonom Python boshqaruv paneli.
