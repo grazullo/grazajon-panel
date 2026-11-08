@@ -145,6 +145,66 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
+def get_battery_stats() -> dict:
+    for p in ["/sys/class/power_supply/battery", "/sys/class/power_supply/bms", "/sys/class/power_supply/BAT0"]:
+        cap_file = os.path.join(p, "capacity")
+        if os.path.exists(cap_file):
+            try:
+                cap = int(open(cap_file).read().strip())
+                status = "Discharging"
+                st_file = os.path.join(p, "status")
+                if os.path.exists(st_file):
+                    status = open(st_file).read().strip()
+                temp = None
+                t_file = os.path.join(p, "temp")
+                if os.path.exists(t_file):
+                    raw_t = int(open(t_file).read().strip())
+                    temp = round(raw_t / 10 if raw_t < 1000 else raw_t / 1000, 1)
+                return {
+                    "percentage": cap,
+                    "status": status,
+                    "temperature_c": temp,
+                    "plugged": status.lower() in ("charging", "full"),
+                }
+            except Exception:
+                pass
+
+    try:
+        res = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=0.8)
+        if res.returncode == 0:
+            d = json.loads(res.stdout)
+            return {
+                "percentage": int(d.get("percentage", 100)),
+                "status": str(d.get("status", "Unknown")),
+                "temperature_c": d.get("temperature"),
+                "plugged": d.get("plugged", "UNPLUGGED") != "UNPLUGGED",
+            }
+    except Exception:
+        pass
+
+    return {
+        "percentage": None,
+        "status": "Tarmoqda (Noma'lum)",
+        "temperature_c": None,
+        "plugged": True,
+    }
+
+
+def get_process_memory_mb(pid: int | None) -> float | None:
+    if not pid:
+        return None
+    try:
+        with open(f"/proc/{pid}/status", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        return round(int(parts[1]) / 1024, 1)
+    except Exception:
+        pass
+    return None
+
+
 def get_system_stats():
     disk = shutil.disk_usage(DATA_DIR)
     mem_total_mb = None
@@ -161,6 +221,25 @@ def get_system_stats():
                 mem_total_mb = round(info["MemTotal"] / 1024)
             if "MemAvailable" in info:
                 mem_avail_mb = round(info["MemAvailable"] / 1024)
+            elif "MemFree" in info:
+                mem_avail_mb = round((info.get("MemFree", 0) + info.get("Buffers", 0) + info.get("Cached", 0)) / 1024)
+    except Exception:
+        pass
+
+    mem_used_mb = (mem_total_mb - mem_avail_mb) if (mem_total_mb and mem_avail_mb) else None
+    mem_percent = round((mem_used_mb / mem_total_mb) * 100) if (mem_total_mb and mem_used_mb) else None
+
+    load_1m = 0.0
+    try:
+        with open("/proc/loadavg", "r", encoding="utf-8") as f:
+            load_1m = round(float(f.read().split()[0]), 2)
+    except Exception:
+        pass
+
+    device_uptime_sec = 0
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as f:
+            device_uptime_sec = int(float(f.read().split()[0]))
     except Exception:
         pass
 
@@ -170,6 +249,11 @@ def get_system_stats():
         "disk_total_mb": round(disk.total / (1024 * 1024)),
         "mem_total_mb": mem_total_mb,
         "mem_avail_mb": mem_avail_mb,
+        "mem_used_mb": mem_used_mb,
+        "mem_percent": mem_percent,
+        "cpu_load_1m": load_1m,
+        "device_uptime_sec": device_uptime_sec,
+        "battery": get_battery_stats(),
         "local_ip": get_local_ip(),
     }
 
@@ -383,11 +467,13 @@ class Supervisor:
         with m.lock:
             pid = m.proc.pid if (m.proc and m.proc.poll() is None) else None
             uptime = int(time.time() - m.started_at) if (m.started_at and m.status == "running") else 0
+            ram_mb = get_process_memory_mb(pid)
             return {
                 "status": m.status,
                 "pid": pid,
                 "uptime_sec": uptime,
                 "restarts": m.restarts,
+                "ram_mb": ram_mb,
             }
 
     def start_autostarts(self):
@@ -773,6 +859,18 @@ class PanelHandler(BaseHTTPRequestHandler):
 
         cfg = self._require_auth()
         if cfg is None:
+            return
+
+        if path == "/api/system/clean_ram":
+            import gc
+            collected = gc.collect()
+            try:
+                if hasattr(os, "sync"):
+                    os.sync()
+            except Exception:
+                pass
+            stats = get_system_stats()
+            self._send_json({"ok": True, "message": "Operativ xotira (RAM) tozalandi!", "stats": stats, "collected_objects": collected})
             return
 
         if path == "/api/projects":
