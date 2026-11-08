@@ -1,25 +1,41 @@
 #!/usr/bin/env python3
 """
-Grazajon Host Panel — Termux / Android uchun yengil Python boshqaruv paneli.
-Tashqi kutubxonalarsiz (faqat standart Python 3) ishlaydi.
+Grazajon Host Panel v2.0 — Multi-Tenant Cloud PaaS Platform
+Termux / Android va Linux VPS uchun to'liq avtonom Python boshqaruv paneli.
+Tashqi kutubxonalarsiz (faqat standart Python 3: sqlite3, http.server, urllib, subprocess) ishlaydi.
+
+Xususiyatlari:
+- Ko'p foydalanuvchili tizim (Multi-Tenant SQLite3 baza)
+- Har bir mijoz uchun qat'iy ma'lumotlar va fayllar izolyatsiyasi
+- Google va GitHub OAuth orqali kirish / ro'yxatdan o'tish
+- Parol va loginlarni telefonga (Telegram bot) yuborish va .txt yuklab olish
+- Anti-Crash Watchdog: Har bir jarayon uchun RAM limiti va avtomatik himoya
+- DoS / Brute-force himoyasi (Rate Limiting)
+- Telefon apparat telemetriyasi (Batareya, Harorat, CPU, RAM tozalash)
 """
 
 import argparse
+import base64
 import hashlib
 import hmac
+import io
 import json
 import os
+import re
 import secrets
 import shlex
 import shutil
 import signal
 import socket
+import sqlite3
 import stat
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import zipfile
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,17 +44,23 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("PANEL_DATA", Path.home() / "grazajon_data")).resolve()
 APPS_DIR = DATA_DIR / "apps"
+DB_FILE = DATA_DIR / "users.db"
 CONFIG_FILE = DATA_DIR / "config.json"
 INDEX_FILE = BASE_DIR / "index.html"
 
 MAX_LOG_BYTES = 2 * 1024 * 1024
 TRIM_LOG_BYTES = 512 * 1024
-MAX_ZIP_EXTRACT_BYTES = 128 * 1024 * 1024
+MAX_ZIP_EXTRACT_BYTES = 64 * 1024 * 1024
 SESSION_TTL = 7 * 24 * 3600
 
 STATE_LOCK = threading.RLock()
 LOG_LOCK = threading.Lock()
+DB_LOCK = threading.Lock()
 PANEL_PORT = 5000
+
+# Rate Limiter: IP -> [timestamps]
+IP_RATE_LIMIT: dict[str, list[float]] = {}
+RATE_LIMIT_LOCK = threading.Lock()
 
 
 def ensure_dirs():
@@ -46,34 +68,138 @@ def ensure_dirs():
     APPS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def load_config():
+# ==============================================================================
+# DATABASE LAYER (SQLite3 - Zero Dependencies)
+# ==============================================================================
+
+def get_db_connection() -> sqlite3.Connection:
     ensure_dirs()
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    else:
-        cfg = {}
-    changed = False
-    if "secret" not in cfg:
-        cfg["secret"] = secrets.token_hex(32)
-        changed = True
-    if "projects" not in cfg or not isinstance(cfg["projects"], dict):
-        cfg["projects"] = {}
-        changed = True
-    if "port" not in cfg:
-        cfg["port"] = int(os.environ.get("PANEL_PORT", "5000"))
-        changed = True
-    if changed:
-        save_config(cfg)
-    return cfg
+    conn = sqlite3.connect(DB_FILE, timeout=15.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    return conn
 
 
-def save_config(cfg):
+def init_db():
     ensure_dirs()
-    tmp = CONFIG_FILE.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, CONFIG_FILE)
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # 1. Users table
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'client',
+            plan TEXT NOT NULL DEFAULT 'starter',
+            phone TEXT DEFAULT '',
+            email TEXT DEFAULT '',
+            telegram TEXT DEFAULT '',
+            provider TEXT NOT NULL DEFAULT 'local',
+            provider_id TEXT DEFAULT '',
+            max_projects INTEGER NOT NULL DEFAULT 3,
+            max_ram_mb INTEGER NOT NULL DEFAULT 150,
+            created_at INTEGER NOT NULL,
+            last_login INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+        )
+        """)
+
+        # 2. Sessions table
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """)
+
+        # 3. Projects table
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL DEFAULT 'bot',
+            entry TEXT NOT NULL DEFAULT 'bot.py',
+            port INTEGER,
+            env_json TEXT DEFAULT '{}',
+            auto_restart INTEGER DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """)
+
+        # 4. System Settings table
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+        """)
+
+        conn.commit()
+
+        # Eski config.json dan adminni migratsiya qilish
+        cur.execute("SELECT COUNT(*) as count FROM users")
+        row = cur.fetchone()
+        user_count = row["count"] if row else 0
+
+        if user_count == 0 and CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                if cfg.get("password_hash") and cfg.get("salt"):
+                    now = int(time.time())
+                    cur.execute("""
+                    INSERT INTO users (username, password_hash, salt, role, plan, max_projects, max_ram_mb, created_at, last_login)
+                    VALUES (?, ?, ?, 'admin', 'vip', 50, 1024, ?, ?)
+                    """, ("admin", cfg["password_hash"], cfg["salt"], now, now))
+                    admin_id = cur.lastrowid
+                    
+                    # Eski loyihalarni admin nomiga biriktirish
+                    if isinstance(cfg.get("projects"), dict):
+                        for pid, pdata in cfg["projects"].items():
+                            cur.execute("""
+                            INSERT OR IGNORE INTO projects (id, user_id, name, type, entry, port, env_json, auto_restart, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                pid, admin_id, pdata.get("name", pid), pdata.get("type", "bot"),
+                                pdata.get("entry", "bot.py"), pdata.get("port"),
+                                json.dumps(pdata.get("env") or {}),
+                                1 if pdata.get("auto_restart", True) else 0,
+                                int(pdata.get("created_at") or now)
+                            ))
+                    conn.commit()
+            except Exception as e:
+                print(f"[OGOHLANTIRISH] config.json migratsiyasida xato: {e}")
+
+        conn.close()
+
+
+def get_setting(key: str, default: str = "") -> str:
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM system_settings WHERE key = ?", (key,))
+        row = cur.fetchone()
+        conn.close()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value: str):
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
+        conn.close()
 
 
 def hash_password(password: str, salt: str | None = None):
@@ -83,39 +209,158 @@ def hash_password(password: str, salt: str | None = None):
     return dk.hex(), salt
 
 
-def verify_password(password: str, cfg: dict) -> bool:
-    stored = cfg.get("password_hash")
-    salt = cfg.get("salt")
-    if not stored or not salt:
+def verify_password(password: str, stored_hash: str, salt: str) -> bool:
+    if not stored_hash or not salt:
         return False
     dk, _ = hash_password(password, salt)
-    return hmac.compare_digest(dk, stored)
+    return hmac.compare_digest(dk, stored_hash)
 
 
-def make_session_token(secret: str) -> str:
-    exp = int(time.time()) + SESSION_TTL
-    nonce = secrets.token_hex(8)
-    payload = f"{exp}.{nonce}"
-    sig = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+def db_create_user(username: str, password: str, phone: str = "", email: str = "", role: str = "client", plan: str = "starter", provider: str = "local", provider_id: str = ""):
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Birinchi foydalanuvchi avtomatik admin bo'ladi
+        cur.execute("SELECT COUNT(*) as cnt FROM users")
+        if cur.fetchone()["cnt"] == 0:
+            role = "admin"
+            plan = "vip"
+            max_proj = 50
+            max_ram = 1024
+        else:
+            max_proj = 3 if plan == "starter" else (8 if plan == "pro" else 20)
+            max_ram = 150 if plan == "starter" else (350 if plan == "pro" else 800)
+
+        pw_hash, salt = hash_password(password)
+        now = int(time.time())
+        cur.execute("""
+        INSERT INTO users (username, password_hash, salt, role, plan, phone, email, provider, provider_id, max_projects, max_ram_mb, created_at, last_login)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (username.strip(), pw_hash, salt, role, plan, phone.strip(), email.strip(), provider, provider_id, max_proj, max_ram, now, now))
+        user_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return user_id
 
 
-def verify_session_token(token: str, secret: str) -> bool:
-    if not token or not secret:
+def db_get_user(user_id: int) -> dict | None:
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def db_get_user_by_username(username: str) -> dict | None:
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username.strip(),))
+        row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def db_create_session(user_id: int) -> str:
+    token = secrets.token_hex(32)
+    now = int(time.time())
+    expires = now + SESSION_TTL
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                    (token, user_id, now, expires))
+        cur.execute("UPDATE users SET last_login = ? WHERE id = ?", (now, user_id))
+        conn.commit()
+        conn.close()
+    return token
+
+
+def db_get_user_by_session(token: str) -> dict | None:
+    if not token:
+        return None
+    now = int(time.time())
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+        SELECT u.* FROM users u
+        JOIN sessions s ON u.id = s.user_id
+        WHERE s.token = ? AND s.expires_at > ? AND u.status = 'active'
+        """, (token, now))
+        row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def db_delete_session(token: str):
+    if not token:
+        return
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+        conn.close()
+
+
+# ==============================================================================
+# TELEGRAM NOTIFICATION HELPER
+# ==============================================================================
+
+def send_telegram_alert(message: str, custom_chat_id: str | None = None):
+    """
+    Parol va xabarlarni Telegram bot orqali telefonga yuborish.
+    Tashqi pip kutubxonalarsiz (faqat urllib) ishlaydi.
+    """
+    bot_token = get_setting("telegram_bot_token", os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
+    chat_id = custom_chat_id or get_setting("telegram_admin_chat_id", os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
+    
+    if not bot_token or not chat_id:
         return False
-    parts = token.split(".")
-    if len(parts) != 3:
-        return False
-    exp_s, nonce, sig = parts
-    try:
-        exp = int(exp_s)
-    except ValueError:
-        return False
-    if exp < time.time():
-        return False
-    expected = hmac.new(secret.encode("utf-8"), f"{exp_s}.{nonce}".encode("utf-8"), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(sig, expected)
 
+    def _worker():
+        try:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = json.dumps({
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                pass
+        except Exception as e:
+            print(f"[TELEGRAM XATO] Xabar yuborilmadi: {e}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return True
+
+
+# ==============================================================================
+# RATE LIMITING (Anti-Brute Force / DoS Himoyasi)
+# ==============================================================================
+
+def check_rate_limit(ip: str, max_requests: int = 15, window_sec: int = 60) -> bool:
+    now = time.time()
+    with RATE_LIMIT_LOCK:
+        if ip not in IP_RATE_LIMIT:
+            IP_RATE_LIMIT[ip] = []
+        # Eski so'rovlarni tozalash
+        IP_RATE_LIMIT[ip] = [t for t in IP_RATE_LIMIT[ip] if now - t < window_sec]
+        if len(IP_RATE_LIMIT[ip]) >= max_requests:
+            return False
+        IP_RATE_LIMIT[ip].append(now)
+        return True
+
+
+# ==============================================================================
+# HARDWARE & SYSTEM TELEMETRY
+# ==============================================================================
 
 def slugify(name: str) -> str:
     cleaned = "".join(c.lower() if c.isalnum() else "-" for c in name.strip())
@@ -129,7 +374,7 @@ def safe_join(root: Path, rel_path: str) -> Path:
     target = (root / rel).resolve()
     root_res = root.resolve()
     if target != root_res and root_res not in target.parents:
-        raise ValueError("Ruxsat etilmagan yo'l (path traversal)")
+        raise ValueError("Ruxsat etilmagan yo'l (path traversal xavfi)")
     return target
 
 
@@ -255,6 +500,7 @@ def get_system_stats():
         "device_uptime_sec": device_uptime_sec,
         "battery": get_battery_stats(),
         "local_ip": get_local_ip(),
+        "anti_crash_active": True
     }
 
 
@@ -272,6 +518,10 @@ def append_log(log_path: Path, text: str):
         with open(log_path, "a", encoding="utf-8", errors="replace") as f:
             f.write(text)
 
+
+# ==============================================================================
+# PROCESS SUPERVISOR & ANTI-CRASH RAM WATCHDOG
+# ==============================================================================
 
 class ManagedApp:
     def __init__(self, app_id: str):
@@ -291,12 +541,24 @@ class Supervisor:
         self.apps: dict[str, ManagedApp] = {}
         self.lock = threading.Lock()
         self.panel_started_at = time.time()
+        # Anti-Crash RAM Watchdog fonda doimiy tekshirib turadi
+        self.watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self.watchdog_thread.start()
 
     def get_managed(self, app_id: str) -> ManagedApp:
         with self.lock:
             if app_id not in self.apps:
                 self.apps[app_id] = ManagedApp(app_id)
             return self.apps[app_id]
+
+    def get_app_dir(self, app_id: str, user_id: int) -> Path:
+        # Multi-Tenant izolyatsiya: Har bir foydalanuvchining loyihasi o'z papkasida
+        user_dir = APPS_DIR / f"user_{user_id}" / app_id
+        legacy_dir = APPS_DIR / app_id
+        if legacy_dir.exists() and not user_dir.exists() and user_id == 1:
+            return legacy_dir
+        user_dir.mkdir(parents=True, exist_ok=True)
+        return user_dir
 
     def get_python_bin(self, app_dir: Path) -> str:
         for candidate in [app_dir / ".venv" / "bin" / "python", app_dir / "venv" / "bin" / "python"]:
@@ -328,11 +590,17 @@ class Supervisor:
             return [py, "-u"] + parts
         return parts
 
-    def start(self, app_id: str):
-        with STATE_LOCK:
-            cfg = load_config()
-            if app_id not in cfg["projects"]:
+    def start(self, app_id: str, user_id: int):
+        with DB_LOCK:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM projects WHERE id = ?", (app_id,))
+            p_row = cur.fetchone()
+            conn.close()
+            if not p_row:
                 raise KeyError("Loyiha topilmadi")
+            proj = dict(p_row)
+
         m = self.get_managed(app_id)
         with m.lock:
             if m.desired_running and m.thread and m.thread.is_alive():
@@ -341,7 +609,7 @@ class Supervisor:
             m.stop_event.clear()
             m.restarts = 0
             m.status = "running"
-            m.thread = threading.Thread(target=self._run_loop, args=(app_id, m), daemon=True)
+            m.thread = threading.Thread(target=self._run_loop, args=(app_id, proj, m), daemon=True)
             m.thread.start()
 
     def stop(self, app_id: str):
@@ -359,9 +627,9 @@ class Supervisor:
             m.started_at = None
             m.proc = None
 
-    def restart(self, app_id: str):
+    def restart(self, app_id: str, user_id: int):
         self.stop(app_id)
-        self.start(app_id)
+        self.start(app_id, user_id)
 
     def _kill_proc(self, proc: subprocess.Popen):
         try:
@@ -378,17 +646,13 @@ class Supervisor:
                 except Exception:
                     pass
 
-    def _run_loop(self, app_id: str, m: ManagedApp):
-        app_dir = APPS_DIR / app_id
+    def _run_loop(self, app_id: str, proj: dict, m: ManagedApp):
+        app_dir = self.get_app_dir(app_id, proj["user_id"])
         log_path = app_dir / ".panel.log"
 
-        while not m.stop_event.is_set():
-            with STATE_LOCK:
-                cfg = load_config()
-                proj = cfg["projects"].get(app_id)
-            if not proj:
-                break
+        crash_times = []
 
+        while not m.stop_event.is_set():
             cmd = self.build_command(proj, app_dir)
             env = os.environ.copy()
             env["PYTHONUNBUFFERED"] = "1"
@@ -397,9 +661,13 @@ class Supervisor:
                 env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
             if proj.get("port"):
                 env["PORT"] = str(proj["port"])
-            for k, v in (proj.get("env") or {}).items():
-                if k:
-                    env[str(k)] = str(v)
+            try:
+                env_dict = json.loads(proj.get("env_json") or "{}")
+                for k, v in env_dict.items():
+                    if k:
+                        env[str(k)] = str(v)
+            except Exception:
+                pass
 
             ts = time.strftime("%Y-%m-%d %H:%M:%S")
             append_log(log_path, f"\n[{ts}] [PANEL] Ishga tushmoqda: {' '.join(cmd)}\n")
@@ -447,805 +715,1021 @@ class Supervisor:
                 break
 
             append_log(log_path, f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [PANEL] Jarayon tugadi (kod: {code}).\n")
-            if not proj.get("auto_restart", True):
+            if not proj.get("auto_restart", 1):
                 with m.lock:
                     m.status = "stopped"
                     m.desired_running = False
                 break
 
-            with m.lock:
-                m.status = "restarting"
-                m.restarts += 1
-            append_log(log_path, f"[{time.strftime('%H:%M:%S')}] [PANEL] 5 soniyadan keyin qayta ishga tushadi (#{m.restarts})...\n")
-            if m.stop_event.wait(5):
-                with m.lock:
-                    m.status = "stopped"
-                break
+            # CPU himoyasi (Crash Loop Backoff): Agar skript 10 soniyada 4 martadan ko'p o'chsa, orom oladi
+            now = time.time()
+            crash_times.append(now)
+            crash_times = [t for t in crash_times if now - t < 15]
+            if len(crash_times) >= 4:
+                append_log(log_path, f"[{time.strftime('%H:%M:%S')}] [HIMOYA] Skript tinimsiz xato bermoqda. CPU qizib ketmasligi uchun 15 soniya kutilmoqda...\n")
+                time.sleep(15)
 
-    def status_dict(self, app_id: str) -> dict:
-        m = self.get_managed(app_id)
-        with m.lock:
-            pid = m.proc.pid if (m.proc and m.proc.poll() is None) else None
-            uptime = int(time.time() - m.started_at) if (m.started_at and m.status == "running") else 0
-            ram_mb = get_process_memory_mb(pid)
-            return {
-                "status": m.status,
-                "pid": pid,
-                "uptime_sec": uptime,
-                "restarts": m.restarts,
-                "ram_mb": ram_mb,
-            }
+            m.restarts += 1
+            time.sleep(2)
 
-    def start_autostarts(self):
-        cfg = load_config()
-        for app_id, proj in cfg["projects"].items():
-            if proj.get("autostart"):
-                try:
-                    self.start(app_id)
-                except Exception:
-                    pass
+    def _watchdog_loop(self):
+        """
+        ANTI-CRASH XAVFSIZLIK TIZIMI:
+        Har 6 soniyada barcha ishlayotgan loyihalarni tekshiradi.
+        Agar biron-bir foydalanuvchining boti ruxsat etilgan RAM hajmidan (masalan 150MB)
+        oshib ketsa, server va telefonni qotib qolishdan asrash uchun o'sha jarayon to'xtatiladi.
+        """
+        while True:
+            time.sleep(6)
+            try:
+                with DB_LOCK:
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute("""
+                    SELECT p.id, p.user_id, u.max_ram_mb, u.username
+                    FROM projects p
+                    JOIN users u ON p.user_id = u.id
+                    """)
+                    limits = {r["id"]: (r["max_ram_mb"], r["user_id"], r["username"]) for r in cur.fetchall()}
+                    conn.close()
 
-    def stop_all(self):
-        for app_id in list(self.apps.keys()):
-            self.stop(app_id)
+                for app_id, m in list(self.apps.items()):
+                    with m.lock:
+                        proc = m.proc
+                        if not proc or proc.poll() is not None:
+                            continue
+                        pid = proc.pid
+
+                    mem = get_process_memory_mb(pid)
+                    if mem and app_id in limits:
+                        max_allowed, uid, uname = limits[app_id]
+                        if mem > max_allowed:
+                            # RAM limitidan oshdi! Telefonni asrash uchun to'xtatamiz.
+                            self._kill_proc(proc)
+                            app_dir = self.get_app_dir(app_id, uid)
+                            append_log(
+                                app_dir / ".panel.log",
+                                f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] [GRAZAJON XAVFSIZLIK] ⚠️ Jarayon ruxsat etilgan RAM hajmidan oshdi ({mem} MB > {max_allowed} MB)! Telefon va serverni crashdan asrash uchun jarayon avtomatik to'xtatildi.\n"
+                            )
+                            with m.lock:
+                                m.status = "stopped"
+                                m.desired_running = False
+                                m.proc = None
+            except Exception:
+                pass
 
 
 SUPERVISOR = Supervisor()
 
-TEMPLATES = {
-    "bot": {
-        "entry": "bot.py",
-        "files": {
-            "bot.py": '''import json
-import os
-import time
-import urllib.parse
-import urllib.request
 
-TOKEN = os.environ.get("BOT_TOKEN", "BU_YERGA_BOT_TOKEN_YOZING")
-API = f"https://api.telegram.org/bot{TOKEN}"
-
-
-def call(method, params=None):
-    url = f"{API}/{method}"
-    if params:
-        data = urllib.parse.urlencode(params).encode()
-        req = urllib.request.Request(url, data=data)
-    else:
-        req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=35) as r:
-        return json.loads(r.read().decode())
-
-
-if __name__ == "__main__":
-    print("Bot ishga tushmoqda...")
-    if "BU_YERGA" in TOKEN:
-        print("DIQQAT: Sozlamalar -> Env bo'limiga BOT_TOKEN kiriting!")
-        while True:
-            time.sleep(30)
-
-    offset = 0
-    while True:
-        try:
-            res = call("getUpdates", {"offset": offset, "timeout": 25})
-            for upd in res.get("result", []):
-                offset = upd["update_id"] + 1
-                msg = upd.get("message") or {}
-                chat_id = (msg.get("chat") or {}).get("id")
-                text = msg.get("text", "")
-                if chat_id and text:
-                    reply = f"Salom! Telefondan javob: {text}"
-                    call("sendMessage", {"chat_id": chat_id, "text": reply})
-                    print(f"Xabar keldi [{chat_id}]: {text}")
-        except Exception as e:
-            print("Tarmoq xatosi (5s kutish):", e)
-            time.sleep(5)
-''',
-            "requirements.txt": "# Kerakli kutubxonalarni shu yerga yozing, masalan:\n# pyTelegramBotAPI\n# python-telegram-bot\n",
-        },
-    },
-    "web_py": {
-        "entry": "server.py",
-        "files": {
-            "server.py": '''import os
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-
-PORT = int(os.environ.get("PORT", "8080"))
-
-
-class Handler(SimpleHTTPRequestHandler):
-    pass
-
-
-if __name__ == "__main__":
-    print(f"Python sayt {PORT}-portda ishga tushdi!")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
-''',
-            "index.html": '''<!doctype html>
-<html lang="uz">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mening Saytim</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 60px auto; padding: 0 20px; color: #0f172a; }
-    .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Salom! Bu sayt telefondan ishlayapti</h1>
-    <p>Fayllar bo'limidan <code>index.html</code> yoki <code>server.py</code> ni tahrirlashingiz mumkin.</p>
-  </div>
-</body>
-</html>
-''',
-            "requirements.txt": "",
-        },
-    },
-    "static": {
-        "entry": "index.html",
-        "files": {
-            "index.html": '''<!doctype html>
-<html lang="uz">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Statik Sayt</title>
-</head>
-<body style="font-family:system-ui;padding:40px;">
-  <h1>Sayt muvaffaqiyatli ishga tushdi!</h1>
-</body>
-</html>
-''',
-        },
-    },
-    "empty": {
-        "entry": "main.py",
-        "files": {
-            "main.py": 'print("Salom, Termux!")\n',
-        },
-    },
-}
-
-
-def validate_port(raw_port) -> str:
-    s = str(raw_port or "").strip()
-    if not s:
-        return ""
-    if not s.isdigit() or not (1 <= int(s) <= 65535):
-        raise ValueError("Port 1 dan 65535 gacha bo'lgan son bo'lishi kerak")
-    return s
-
-
-def safe_app_file(app_dir: Path, rel_path: str) -> Path:
-    target = safe_join(app_dir, rel_path)
-    if target == (app_dir / ".panel.log").resolve():
-        raise ValueError("Bu tizim log faylini tahrirlab bo'lmaydi")
-    return target
-
+# ==============================================================================
+# HTTP HANDLER (Multi-Tenant, OAuth & Security)
+# ==============================================================================
 
 class PanelHandler(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
+    server_version = "GrazajonHost/2.0"
 
-    def log_message(self, format, *args):
-        pass
+    def _set_headers(self, status: int = 200, content_type: str = "application/json"):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.end_headers()
 
-    def _write_response(self, status: int, content_type: str, body: bytes, extra_headers: list[tuple[str, str]] | None = None):
-        try:
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            if extra_headers:
-                for k, v in extra_headers:
-                    self.send_header(k, v)
-            self.end_headers()
-            self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    def _send_json(self, data: dict | list, status: int = 200, extra_headers: list[tuple[str, str]] | None = None):
+    def _json(self, status: int, data: dict):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self._write_response(status, "application/json; charset=utf-8", body, extra_headers)
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
-    def _send_html(self, content: bytes, status: int = 200):
-        self._write_response(status, "text/html; charset=utf-8", content)
+    def _error(self, status: int, message: str):
+        self._json(status, {"success": False, "error": message})
 
-    def _read_body(self, max_bytes: int = 64 * 1024 * 1024) -> bytes:
-        try:
-            length = int(self.headers.get("Content-Length", "0") or "0")
-        except ValueError:
-            raise ValueError("Noto'g'ri Content-Length")
-        if length < 0:
-            raise ValueError("Noto'g'ri Content-Length")
-        if length > max_bytes:
-            raise ValueError("Fayl hajmi juda katta (maksimum 64 MB)")
-        if length == 0:
-            return b""
-        data = self.rfile.read(length)
-        return data
+    def _get_client_ip(self) -> str:
+        fwd = self.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[0].strip()
+        return self.client_address[0]
 
-    def _read_json(self) -> dict:
-        raw = self._read_body(4 * 1024 * 1024)
-        if not raw:
-            return {}
-        parsed = json.loads(raw.decode("utf-8"))
-        if not isinstance(parsed, dict):
-            raise ValueError("JSON obyekt bo'lishi kerak")
-        return parsed
-
-    def _is_authenticated(self, cfg: dict) -> bool:
-        cookie_hdr = self.headers.get("Cookie", "")
-        if not cookie_hdr:
-            return False
+    def _get_session_token(self) -> str | None:
+        cookie_header = self.headers.get("Cookie")
+        if not cookie_header:
+            return None
         c = cookies.SimpleCookie()
         try:
-            c.load(cookie_hdr)
+            c.load(cookie_header)
         except Exception:
-            return False
-        morsel = c.get("grazajon_sid")
-        if not morsel:
-            return False
-        return verify_session_token(morsel.value, cfg["secret"])
-
-    def _require_auth(self) -> dict | None:
-        with STATE_LOCK:
-            cfg = load_config()
-        if not cfg.get("password_hash") or not self._is_authenticated(cfg):
-            self._send_json({"error": "Avtorizatsiya talab qilinadi"}, status=401)
             return None
-        return cfg
+        morsel = c.get("grazajon_sid")
+        return morsel.value if morsel else None
 
+    def _get_current_user(self) -> dict | None:
+        token = self._get_session_token()
+        if not token:
+            return None
+        return db_get_user_by_session(token)
+
+    def _require_user(self) -> dict | None:
+        user = self._get_current_user()
+        if not user:
+            self._error(401, "Tizimga kirmagansiz yoki sessiya muddati tugagan")
+            return None
+        return user
+
+    def _require_admin(self) -> dict | None:
+        user = self._require_user()
+        if not user:
+            return None
+        if user["role"] != "admin":
+            self._error(403, "Bu amal faqat administrator uchun ruxsat etilgan")
+            return None
+        return user
+
+    def _read_json(self) -> dict:
+        clen = int(self.headers.get("Content-Length") or 0)
+        if clen <= 0:
+            return {}
+        if clen > 10 * 1024 * 1024:
+            raise ValueError("So'rov hajmi juda katta")
+        raw = self.rfile.read(clen)
+        return json.loads(raw.decode("utf-8"))
+
+    # --------------------------------------------------------------------------
+    # GET SO'ROVLARI
+    # --------------------------------------------------------------------------
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
+        # 1. Asosiy sahifa (index.html)
         if path == "/" or path == "/index.html":
-            if INDEX_FILE.exists():
-                self._send_html(INDEX_FILE.read_bytes())
-            else:
-                self._send_html(b"<h1>index.html topilmadi</h1>", status=404)
+            if not INDEX_FILE.exists():
+                self._error(404, "index.html topilmadi")
+                return
+            body = INDEX_FILE.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
 
-        if path == "/api/auth/status":
-            with STATE_LOCK:
-                cfg = load_config()
-            needs_setup = not bool(cfg.get("password_hash"))
-            auth = False if needs_setup else self._is_authenticated(cfg)
-            self._send_json({"authenticated": auth, "needs_setup": needs_setup})
+        # 2. Joriy foydalanuvchi ma'lumotlari
+        if path == "/api/auth/me":
+            user = self._get_current_user()
+            if not user:
+                # Agar hali birorta foydalanuvchi yo'q bo'lsa, tizim yangi
+                with DB_LOCK:
+                    conn = get_db_connection()
+                    cnt = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+                    conn.close()
+                self._json(200, {"authenticated": False, "first_run": cnt == 0})
+                return
+
+            # Foydalanuvchining loyihalar soni
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_cnt = conn.execute("SELECT COUNT(*) as c FROM projects WHERE user_id = ?", (user["id"],)).fetchone()["c"]
+                conn.close()
+
+            self._json(200, {
+                "authenticated": True,
+                "user": {
+                    "id": user["id"],
+                    "username": user["username"],
+                    "role": user["role"],
+                    "plan": user["plan"],
+                    "phone": user.get("phone", ""),
+                    "email": user.get("email", ""),
+                    "max_projects": user["max_projects"],
+                    "max_ram_mb": user["max_ram_mb"],
+                    "project_count": p_cnt
+                }
+            })
             return
 
-        cfg = self._require_auth()
-        if cfg is None:
-            return
-
-        if path == "/api/system":
+        # 3. Tizim telemetriyasi
+        if path == "/api/system/stats":
+            user = self._require_user()
+            if not user:
+                return
             stats = get_system_stats()
-            projects = cfg["projects"]
-            running = sum(1 for pid in projects if SUPERVISOR.status_dict(pid)["status"] == "running")
-            stats["running_count"] = running
-            stats["total_count"] = len(projects)
-            stats["panel_uptime_sec"] = int(time.time() - SUPERVISOR.panel_started_at)
-            stats["panel_port"] = PANEL_PORT or int(cfg.get("port", 5000))
-            self._send_json(stats)
+            # Oddiy foydalanuvchiga faqat xavfsiz qismini beramiz, admin to'liq ko'radi
+            if user["role"] != "admin":
+                stats = {
+                    "anti_crash_active": True,
+                    "server_status": "Operational",
+                    "user_plan": user["plan"],
+                    "user_max_ram": user["max_ram_mb"]
+                }
+            self._json(200, {"success": True, "stats": stats})
             return
 
+        # 4. Loyihalar ro'yxati (Faqat o'zining loyihalari!)
         if path == "/api/projects":
-            items = []
-            for app_id, proj in cfg["projects"].items():
-                st = SUPERVISOR.status_dict(app_id)
-                items.append({**proj, **st, "id": app_id})
-            self._send_json({"projects": items})
+            user = self._require_user()
+            if not user:
+                return
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                if user["role"] == "admin" and qs.get("all", ["0"])[0] == "1":
+                    cur.execute("""
+                    SELECT p.*, u.username as owner_username, u.plan as owner_plan
+                    FROM projects p
+                    JOIN users u ON p.user_id = u.id
+                    ORDER BY p.created_at DESC
+                    """)
+                else:
+                    cur.execute("SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC", (user["id"],))
+                rows = [dict(r) for r in cur.fetchall()]
+                conn.close()
+
+            # Jonli holat va RAM ko'rsatkichlarini biriktiramiz
+            res_list = []
+            for r in rows:
+                m = SUPERVISOR.get_managed(r["id"])
+                with m.lock:
+                    st = m.status
+                    uptime = round(time.time() - m.started_at) if (m.status == "running" and m.started_at) else None
+                    pid = m.proc.pid if m.proc else None
+                mem = get_process_memory_mb(pid) if pid else None
+
+                res_list.append({
+                    "id": r["id"],
+                    "user_id": r["user_id"],
+                    "owner": r.get("owner_username", user["username"]),
+                    "name": r["name"],
+                    "type": r["type"],
+                    "entry": r["entry"],
+                    "port": r.get("port"),
+                    "status": st,
+                    "memory_mb": mem,
+                    "uptime_sec": uptime,
+                    "auto_restart": bool(r["auto_restart"]),
+                    "created_at": r["created_at"]
+                })
+
+            self._json(200, {"success": True, "projects": res_list})
             return
 
-        parts = [p for p in path.split("/") if p]
-        if len(parts) >= 3 and parts[0] == "api" and parts[1] == "projects":
-            app_id = parts[2]
-            if app_id not in cfg["projects"]:
-                self._send_json({"error": "Loyiha topilmadi"}, status=404)
+        # 5. Loyiha loglari
+        if path == "/api/projects/logs":
+            user = self._require_user()
+            if not user:
                 return
-            app_dir = APPS_DIR / app_id
-
-            if len(parts) == 4 and parts[3] == "logs":
-                try:
-                    lines_n = max(1, min(int(qs.get("lines", ["200"])[0]), 2000))
-                except ValueError:
-                    lines_n = 200
-                log_path = app_dir / ".panel.log"
-                if not log_path.exists():
-                    self._send_json({"logs": ""})
-                    return
-                with LOG_LOCK:
-                    with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-                        all_lines = f.readlines()
-                self._send_json({"logs": "".join(all_lines[-lines_n:])})
+            pid = qs.get("id", [""])[0]
+            if not pid:
+                self._error(400, "Loyiha ID kiritilmadi")
                 return
 
-            if len(parts) == 4 and parts[3] == "files":
-                rel = qs.get("path", [""])[0]
-                try:
-                    target = safe_join(app_dir, rel)
-                except ValueError as e:
-                    self._send_json({"error": str(e)}, status=400)
-                    return
-                if not target.exists() or not target.is_dir():
-                    self._send_json({"error": "Papka topilmadi"}, status=404)
-                    return
-                entries = []
-                for entry in sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-                    if entry.name == ".panel.log":
-                        continue
-                    rel_item = str(entry.relative_to(app_dir)).replace("\\", "/")
-                    entries.append({
-                        "name": entry.name,
-                        "path": rel_item,
-                        "is_dir": entry.is_dir(),
-                        "size": 0 if entry.is_dir() else entry.stat().st_size,
-                    })
-                self._send_json({"path": rel.strip("/"), "entries": entries})
+            # Izolyatsiya tekshiruvi
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row:
+                self._error(404, "Loyiha topilmadi")
+                return
+            if p_row["user_id"] != user["id"] and user["role"] != "admin":
+                self._error(403, "Bu loyiha loglarini ko'rishga ruxsat yo'q!")
                 return
 
-            if len(parts) == 4 and parts[3] == "file":
-                rel = qs.get("path", [""])[0]
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            log_file = app_dir / ".panel.log"
+            content = ""
+            if log_file.exists():
                 try:
-                    target = safe_app_file(app_dir, rel)
-                except ValueError as e:
-                    self._send_json({"error": str(e)}, status=400)
-                    return
-                if not target.exists() or target.is_dir():
-                    self._send_json({"error": "Fayl topilmadi"}, status=404)
-                    return
-                if target.stat().st_size > 2 * 1024 * 1024:
-                    self._send_json({"error": "Fayl 2 MB dan katta — tahrirlash cheklangan"}, status=400)
-                    return
-                try:
-                    text = target.read_text(encoding="utf-8")
-                    self._send_json({"path": rel, "content": text})
-                except UnicodeDecodeError:
-                    self._send_json({"error": "Bu matnli fayl emas (binary)"}, status=400)
+                    with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                        lines = f.readlines()
+                        content = "".join(lines[-250:])
+                except Exception:
+                    pass
+            self._json(200, {"success": True, "logs": content})
+            return
+
+        # 6. Fayllar ro'yxati (Fayl menejeri)
+        if path == "/api/projects/files":
+            user = self._require_user()
+            if not user:
+                return
+            pid = qs.get("id", [""])[0]
+            sub = qs.get("path", [""])[0]
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row:
+                self._error(404, "Loyiha topilmadi")
+                return
+            if p_row["user_id"] != user["id"] and user["role"] != "admin":
+                self._error(403, "Bu loyiha fayllariga kirish huquqingiz yo'q!")
                 return
 
-        self._send_json({"error": "Topilmadi"}, status=404)
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            try:
+                target = safe_join(app_dir, sub)
+            except ValueError as e:
+                self._error(400, str(e))
+                return
 
+            if not target.exists() or not target.is_dir():
+                self._error(404, "Papka topilmadi")
+                return
+
+            items = []
+            for entry in sorted(target.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
+                if entry.name == ".panel.log":
+                    continue
+                items.append({
+                    "name": entry.name,
+                    "is_dir": entry.is_dir(),
+                    "size": entry.stat().st_size if entry.is_file() else None,
+                    "mtime": int(entry.stat().st_mtime)
+                })
+
+            rel_str = str(target.relative_to(app_dir)).replace("\\", "/")
+            if rel_str == ".":
+                rel_str = ""
+            self._json(200, {"success": True, "path": rel_str, "items": items})
+            return
+
+        # 7. Fayl matnini olish (Kodni tahrirlash uchun)
+        if path == "/api/projects/file/get":
+            user = self._require_user()
+            if not user:
+                return
+            pid = qs.get("id", [""])[0]
+            sub = qs.get("path", [""])[0]
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row or (p_row["user_id"] != user["id"] and user["role"] != "admin"):
+                self._error(403, "Faylga kirish ruxsati yo'q")
+                return
+
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            try:
+                target = safe_join(app_dir, sub)
+            except ValueError as e:
+                self._error(400, str(e))
+                return
+
+            if not target.exists() or not target.is_file():
+                self._error(404, "Fayl topilmadi")
+                return
+
+            if target.stat().st_size > 2 * 1024 * 1024:
+                self._error(400, "Fayl hajmi 2MB dan katta")
+                return
+
+            content = target.read_text(encoding="utf-8", errors="replace")
+            self._json(200, {"success": True, "content": content})
+            return
+
+        # 8. Admin: Foydalanuvchilar ro'yxati
+        if path == "/api/admin/users":
+            user = self._require_admin()
+            if not user:
+                return
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                SELECT u.id, u.username, u.role, u.plan, u.phone, u.email, u.max_projects, u.max_ram_mb,
+                       u.created_at, u.last_login, u.status, COUNT(p.id) as project_count
+                FROM users u
+                LEFT JOIN projects p ON u.id = p.user_id
+                GROUP BY u.id
+                ORDER BY u.id ASC
+                """)
+                users_list = [dict(r) for r in cur.fetchall()]
+                conn.close()
+
+            self._json(200, {"success": True, "users": users_list})
+            return
+
+        # 9. Admin: Tizim sozlamalari
+        if path == "/api/admin/settings":
+            user = self._require_admin()
+            if not user:
+                return
+            self._json(200, {
+                "success": True,
+                "settings": {
+                    "telegram_bot_token": get_setting("telegram_bot_token"),
+                    "telegram_admin_chat_id": get_setting("telegram_admin_chat_id"),
+                    "google_client_id": get_setting("google_client_id"),
+                    "github_client_id": get_setting("github_client_id"),
+                    "default_max_ram_mb": get_setting("default_max_ram_mb", "150"),
+                }
+            })
+            return
+
+        self._error(404, "Manzil topilmadi")
+
+    # --------------------------------------------------------------------------
+    # POST SO'ROVLARI
+    # --------------------------------------------------------------------------
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        qs = urllib.parse.parse_qs(parsed.query)
+        client_ip = self._get_client_ip()
 
-        if path == "/api/auth/setup":
+        # 1. Ro'yxatdan o'tish (Register)
+        if path == "/api/auth/register":
+            if not check_rate_limit(client_ip, max_requests=10, window_sec=60):
+                self._error(429, "Juda ko'p so'rov yuborildi. Iltimos, 1 daqiqa kuting!")
+                return
+
             try:
                 data = self._read_json()
-            except Exception:
-                self._send_json({"error": "Noto'g'ri JSON"}, status=400)
+            except Exception as e:
+                self._error(400, f"Xato ma'lumot: {e}")
                 return
-            pw = (data.get("password") or "").strip()
-            if len(pw) < 4:
-                self._send_json({"error": "Parol kamida 4 ta belgidan iborat bo'lsin"}, status=400)
+
+            username = str(data.get("username") or "").strip()
+            password = str(data.get("password") or "")
+            phone = str(data.get("phone") or "").strip()
+            email = str(data.get("email") or "").strip()
+
+            if not username or len(username) < 3 or len(username) > 30:
+                self._error(400, "Login kamida 3 va ko'pi bilan 30 belgidan iborat bo'lishi kerak")
                 return
-            with STATE_LOCK:
-                cfg = load_config()
-                if cfg.get("password_hash"):
-                    self._send_json({"error": "Parol allaqachon o'rnatilgan"}, status=403)
-                    return
-                h, salt = hash_password(pw)
-                cfg["password_hash"] = h
-                cfg["salt"] = salt
-                save_config(cfg)
-                token = make_session_token(cfg["secret"])
-            self._send_json({"ok": True}, extra_headers=[("Set-Cookie", f"grazajon_sid={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")])
+            if not re.match(r"^[a-zA-Z0-9_\-]+$", username):
+                self._error(400, "Login faqat lotin harflari, sonlar, chiziqcha va pastki chiziqdan iborat bo'lishi mumkin")
+                return
+            if not password or len(password) < 6:
+                self._error(400, "Parol kamida 6 belgidan iborat bo'lishi kerak")
+                return
+
+            # Login band emasligini tekshirish
+            if db_get_user_by_username(username):
+                self._error(400, f"'{username}' nomli foydalanuvchi allaqachon mavjud! Boshqa login tanlang.")
+                return
+
+            try:
+                user_id = db_create_user(username, password, phone=phone, email=email)
+            except Exception as e:
+                self._error(500, f"Ro'yxatdan o'tishda xato: {e}")
+                return
+
+            # Sessiya yaratamiz
+            token = db_create_session(user_id)
+            user = db_get_user(user_id)
+
+            # Telegram bot orqali bildirishnoma (telefonga boradi)
+            alert_msg = (
+                f"🚀 <b>Yangi Foydalanuvchi Ro'yxatdan O'tdi!</b>\n\n"
+                f"👤 <b>Login:</b> <code>{username}</code>\n"
+                f"🔑 <b>Parol:</b> <code>{password}</code>\n"
+                f"📱 <b>Tel:</b> <code>{phone or 'Kiritilmadi'}</code>\n"
+                f"🌐 <b>Host:</b> https://slowstax.uz\n"
+                f"🕒 <b>Vaqt:</b> {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            send_telegram_alert(alert_msg)
+
+            # Cookie o'rnatish
+            c = cookies.SimpleCookie()
+            c["grazajon_sid"] = token
+            c["grazajon_sid"]["path"] = "/"
+            c["grazajon_sid"]["httponly"] = True
+            c["grazajon_sid"]["max-age"] = SESSION_TTL
+            c["grazajon_sid"]["samesite"] = "Lax"
+
+            resp_data = {
+                "success": True,
+                "message": "Ro'yxatdan muvaffaqiyatli o'tdingiz!",
+                "credentials": {
+                    "username": username,
+                    "password": password,
+                    "phone": phone
+                },
+                "user": {
+                    "id": user["id"],
+                    "username": user["username"],
+                    "role": user["role"],
+                    "plan": user["plan"]
+                }
+            }
+            body = json.dumps(resp_data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie", c["grazajon_sid"].OutputString())
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
 
+        # 2. Kirish (Login)
         if path == "/api/auth/login":
+            if not check_rate_limit(client_ip, max_requests=15, window_sec=60):
+                self._error(429, "Juda ko'p urinishlar. Iltimos, 1 daqiqa kuting!")
+                return
+
             try:
                 data = self._read_json()
-            except Exception:
-                self._send_json({"error": "Noto'g'ri JSON"}, status=400)
+            except Exception as e:
+                self._error(400, f"Xato ma'lumot: {e}")
                 return
-            pw = data.get("password") or ""
-            with STATE_LOCK:
-                cfg = load_config()
-                if not verify_password(pw, cfg):
-                    self._send_json({"error": "Parol noto'g'ri"}, status=401)
-                    return
-                token = make_session_token(cfg["secret"])
-            self._send_json({"ok": True}, extra_headers=[("Set-Cookie", f"grazajon_sid={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")])
+
+            username = str(data.get("username") or "").strip()
+            password = str(data.get("password") or "")
+
+            user = db_get_user_by_username(username)
+            if not user or not verify_password(password, user["password_hash"], user["salt"]):
+                self._error(401, "Login yoki parol noto'g'ri!")
+                return
+
+            if user["status"] != "active":
+                self._error(403, "Hisobingiz administrator tomonidan to'xtatilgan!")
+                return
+
+            token = db_create_session(user["id"])
+
+            c = cookies.SimpleCookie()
+            c["grazajon_sid"] = token
+            c["grazajon_sid"]["path"] = "/"
+            c["grazajon_sid"]["httponly"] = True
+            c["grazajon_sid"]["max-age"] = SESSION_TTL
+            c["grazajon_sid"]["samesite"] = "Lax"
+
+            resp_data = {
+                "success": True,
+                "message": "Hush kelibsiz!",
+                "user": {
+                    "id": user["id"],
+                    "username": user["username"],
+                    "role": user["role"],
+                    "plan": user["plan"]
+                }
+            }
+            body = json.dumps(resp_data, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie", c["grazajon_sid"].OutputString())
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
 
-        if path == "/api/auth/logout":
-            self._send_json({"ok": True}, extra_headers=[("Set-Cookie", "grazajon_sid=; Path=/; HttpOnly; Max-Age=0")])
-            return
+        # 3. Google OAuth orqali kirish / ro'yxatdan o'tish
+        if path == "/api/auth/google":
+            data = self._read_json()
+            credential = data.get("credential", "")
+            if not credential:
+                self._error(400, "Google tokeni topilmadi")
+                return
 
-        cfg = self._require_auth()
-        if cfg is None:
-            return
-
-        if path == "/api/system/clean_ram":
-            import gc
-            collected = gc.collect()
+            # Google JWT payload decode (Base64)
             try:
-                if hasattr(os, "sync"):
-                    os.sync()
+                parts = credential.split(".")
+                if len(parts) < 2:
+                    raise ValueError("JWT xato formatda")
+                payload_raw = parts[1]
+                # Pad base64
+                payload_raw += "=" * ((4 - len(payload_raw) % 4) % 4)
+                payload = json.loads(base64.b64decode(payload_raw).decode("utf-8"))
+                email = payload.get("email", "")
+                name = payload.get("name", "")
+                sub = payload.get("sub", "")
+            except Exception as e:
+                self._error(400, f"Google tokenini o'qib bo'lmadi: {e}")
+                return
+
+            # Foydalanuvchini topish yoki yaratish
+            with DB_LOCK:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM users WHERE provider_id = ? OR email = ?", (sub, email))
+                row = cur.fetchone()
+                conn.close()
+
+            if row:
+                user = dict(row)
+            else:
+                base_uname = re.sub(r"[^a-zA-Z0-9]", "", name.lower()) or "guser"
+                uname = base_uname[:18]
+                counter = 1
+                while db_get_user_by_username(uname):
+                    uname = f"{base_uname[:15]}{counter}"
+                    counter += 1
+                auto_pw = secrets.token_hex(8)
+                uid = db_create_user(uname, auto_pw, email=email, provider="google", provider_id=sub)
+                user = db_get_user(uid)
+
+            token = db_create_session(user["id"])
+            c = cookies.SimpleCookie()
+            c["grazajon_sid"] = token
+            c["grazajon_sid"]["path"] = "/"
+            c["grazajon_sid"]["httponly"] = True
+            c["grazajon_sid"]["max-age"] = SESSION_TTL
+            c["grazajon_sid"]["samesite"] = "Lax"
+
+            resp_data = {"success": True, "user": {"id": user["id"], "username": user["username"], "role": user["role"], "plan": user["plan"]}}
+            body = json.dumps(resp_data).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", c["grazajon_sid"].OutputString())
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # 4. Chiqish (Logout)
+        if path == "/api/auth/logout":
+            token = self._get_session_token()
+            if token:
+                db_delete_session(token)
+            c = cookies.SimpleCookie()
+            c["grazajon_sid"] = ""
+            c["grazajon_sid"]["path"] = "/"
+            c["grazajon_sid"]["max-age"] = 0
+            body = json.dumps({"success": True}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", c["grazajon_sid"].OutputString())
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # Qolgan barcha amallar uchun foydalanuvchi tizimga kirgan bo'lishi shart!
+        user = self._require_user()
+        if not user:
+            return
+
+        # 5. Yangi loyiha yaratish
+        if path == "/api/projects/create":
+            data = self._read_json()
+            name = str(data.get("name") or "").strip()
+            ptype = str(data.get("type") or "bot").strip()
+            entry = str(data.get("entry") or "bot.py").strip()
+            port = data.get("port")
+            if port:
+                try:
+                    port = int(port)
+                except ValueError:
+                    port = None
+
+            if not name:
+                self._error(400, "Loyiha nomi kiritilmadi")
+                return
+
+            # Loyihalar soni limitini tekshirish
+            with DB_LOCK:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) as cnt FROM projects WHERE user_id = ?", (user["id"],))
+                cnt = cur.fetchone()["cnt"]
+                conn.close()
+
+            if cnt >= user["max_projects"] and user["role"] != "admin":
+                self._error(400, f"Sizning tarifingizda loyihalar limiti to'lgan ({cnt}/{user['max_projects']}). Yangi loyiha qo'shish uchun tarifni oshiring!")
+                return
+
+            pid = slugify(name)
+            base_pid = pid
+            counter = 1
+            with DB_LOCK:
+                conn = get_db_connection()
+                while conn.execute("SELECT id FROM projects WHERE id = ?", (pid,)).fetchone():
+                    pid = f"{base_pid}-{counter}"
+                    counter += 1
+                
+                now = int(time.time())
+                conn.execute("""
+                INSERT INTO projects (id, user_id, name, type, entry, port, env_json, auto_restart, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, '{}', 1, ?)
+                """, (pid, user["id"], name, ptype, entry, port, now))
+                conn.commit()
+                conn.close()
+
+            # Papka yaratish
+            app_dir = SUPERVISOR.get_app_dir(pid, user["id"])
+            if not (app_dir / entry).exists():
+                if entry.endswith(".py"):
+                    (app_dir / entry).write_text(
+                        f"# Grazajon Host — {name}\n# Muallif: {user['username']}\nimport time\n\nprint('{name} muvaffaqiyatli ishga tushdi!')\nwhile True:\n    time.sleep(10)\n",
+                        encoding="utf-8"
+                    )
+                elif entry.endswith(".html"):
+                    (app_dir / entry).write_text(
+                        f"<!DOCTYPE html><html><head><title>{name}</title></head><body><h1>{name} ishlamoqda!</h1></body></html>",
+                        encoding="utf-8"
+                    )
+
+            self._json(200, {"success": True, "project_id": pid})
+            return
+
+        # 6. Loyihani o'chirish
+        if path == "/api/projects/delete":
+            data = self._read_json()
+            pid = data.get("id")
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                if not p_row:
+                    conn.close()
+                    self._error(404, "Loyiha topilmadi")
+                    return
+                if p_row["user_id"] != user["id"] and user["role"] != "admin":
+                    conn.close()
+                    self._error(403, "O'chirishga ruxsat yo'q")
+                    return
+                conn.execute("DELETE FROM projects WHERE id = ?", (pid,))
+                conn.commit()
+                conn.close()
+
+            SUPERVISOR.stop(pid)
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            if app_dir.exists():
+                shutil.rmtree(app_dir, ignore_errors=True)
+
+            self._json(200, {"success": True})
+            return
+
+        # 7. Start, Stop, Restart
+        if path in ("/api/projects/start", "/api/projects/stop", "/api/projects/restart"):
+            data = self._read_json()
+            pid = data.get("id")
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row:
+                self._error(404, "Loyiha topilmadi")
+                return
+            if p_row["user_id"] != user["id"] and user["role"] != "admin":
+                self._error(403, "Bu loyihani boshqarishga ruxsat yo'q")
+                return
+
+            if path == "/api/projects/start":
+                SUPERVISOR.start(pid, p_row["user_id"])
+            elif path == "/api/projects/stop":
+                SUPERVISOR.stop(pid)
+            elif path == "/api/projects/restart":
+                SUPERVISOR.restart(pid, p_row["user_id"])
+
+            self._json(200, {"success": True})
+            return
+
+        # 8. Fayl saqlash (Code Editor)
+        if path == "/api/projects/file/save":
+            data = self._read_json()
+            pid = data.get("id")
+            sub = data.get("path")
+            content = data.get("content", "")
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row or (p_row["user_id"] != user["id"] and user["role"] != "admin"):
+                self._error(403, "Faylni tahrirlashga ruxsat yo'q")
+                return
+
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            try:
+                target = safe_join(app_dir, sub)
+            except ValueError as e:
+                self._error(400, str(e))
+                return
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            self._json(200, {"success": True})
+            return
+
+        # 9. Faylni o'chirish
+        if path == "/api/projects/file/delete":
+            data = self._read_json()
+            pid = data.get("id")
+            sub = data.get("path")
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row or (p_row["user_id"] != user["id"] and user["role"] != "admin"):
+                self._error(403, "O'chirishga ruxsat yo'q")
+                return
+
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            try:
+                target = safe_join(app_dir, sub)
+            except ValueError as e:
+                self._error(400, str(e))
+                return
+
+            if target.is_dir():
+                shutil.rmtree(target, ignore_errors=True)
+            elif target.is_file():
+                target.unlink(missing_ok=True)
+
+            self._json(200, {"success": True})
+            return
+
+        # 10. Fayl yoki ZIP yuklash
+        if path == "/api/projects/upload":
+            ctype = self.headers.get("Content-Type", "")
+            clen = int(self.headers.get("Content-Length") or 0)
+            if clen <= 0 or clen > 35 * 1024 * 1024:
+                self._error(400, "Fayl hajmi ruxsat etilmagan (maksimal 35MB)")
+                return
+
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            pid = qs.get("id", [""])[0]
+
+            with DB_LOCK:
+                conn = get_db_connection()
+                p_row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                conn.close()
+
+            if not p_row or (p_row["user_id"] != user["id"] and user["role"] != "admin"):
+                self._error(403, "Yuklashga ruxsat yo'q")
+                return
+
+            app_dir = SUPERVISOR.get_app_dir(pid, p_row["user_id"])
+            raw_body = self.rfile.read(clen)
+
+            # Agar ZIP fayl bo'lsa, xavfsiz ochib beramiz
+            if raw_body.startswith(b"PK\x03\x04"):
+                try:
+                    with zipfile.ZipFile(io.BytesIO(raw_body)) as zf:
+                        # Zip-bomb tekshiruvi
+                        total_uncompressed = sum(info.file_size for info in zf.infolist())
+                        if total_uncompressed > MAX_ZIP_EXTRACT_BYTES or len(zf.infolist()) > 500:
+                            self._error(400, "ZIP arxivi juda katta yoki juda ko'p fayllardan iborat!")
+                            return
+                        for member in zf.infolist():
+                            dest = safe_join(app_dir, member.filename)
+                            if member.is_dir():
+                                dest.mkdir(parents=True, exist_ok=True)
+                            else:
+                                dest.parent.mkdir(parents=True, exist_ok=True)
+                                with zf.open(member) as src, open(dest, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+                    self._json(200, {"success": True, "message": "ZIP arxiv muvaffaqiyatli ochildi!"})
+                    return
+                except Exception as e:
+                    self._error(400, f"ZIP faylni ochishda xato: {e}")
+                    return
+
+            # Oddiy fayl bo'lsa
+            fname = qs.get("filename", ["uploaded_file.py"])[0]
+            try:
+                dest = safe_join(app_dir, fname)
+                dest.write_bytes(raw_body)
+                self._json(200, {"success": True, "filename": fname})
+            except Exception as e:
+                self._error(400, str(e))
+            return
+
+        # 11. RAM tozalash (Faqat Admin)
+        if path == "/api/system/clean_ram":
+            if user["role"] != "admin":
+                self._error(403, "Faqat admin uchun")
+                return
+            import gc
+            gc.collect()
+            try:
+                subprocess.run(["sync"], timeout=1)
             except Exception:
                 pass
-            stats = get_system_stats()
-            self._send_json({"ok": True, "message": "Operativ xotira (RAM) tozalandi!", "stats": stats, "collected_objects": collected})
+            self._json(200, {"success": True, "message": "RAM xotirasi muvaffaqiyatli tozalandi!"})
             return
 
-        if path == "/api/projects":
-            try:
-                data = self._read_json()
-            except Exception:
-                self._send_json({"error": "Noto'g'ri JSON"}, status=400)
+        # 12. Admin: Foydalanuvchini yangilash / o'chirish / sozlamalar
+        if path == "/api/admin/users/update":
+            if user["role"] != "admin":
+                self._error(403, "Faqat admin uchun")
                 return
-            name = (data.get("name") or "").strip()
-            if not name:
-                self._send_json({"error": "Loyiha nomini kiriting"}, status=400)
-                return
-            tpl_key = data.get("template") or "bot"
-            if tpl_key not in TEMPLATES:
-                tpl_key = "empty"
-            tpl = TEMPLATES[tpl_key]
+            data = self._read_json()
+            target_id = data.get("id")
+            plan = data.get("plan")
+            status = data.get("status")
+            max_ram = data.get("max_ram_mb")
+            max_proj = data.get("max_projects")
 
-            req_type = data.get("type", "bot")
-            if req_type not in ("bot", "web", "static"):
-                req_type = "bot"
-            ptype = "bot" if tpl_key == "bot" else ("static" if tpl_key == "static" else ("web" if tpl_key == "web_py" else req_type))
+            with DB_LOCK:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                if plan:
+                    cur.execute("UPDATE users SET plan = ? WHERE id = ?", (plan, target_id))
+                if status:
+                    cur.execute("UPDATE users SET status = ? WHERE id = ?", (status, target_id))
+                if max_ram:
+                    cur.execute("UPDATE users SET max_ram_mb = ? WHERE id = ?", (int(max_ram), target_id))
+                if max_proj:
+                    cur.execute("UPDATE users SET max_projects = ? WHERE id = ?", (int(max_proj), target_id))
+                conn.commit()
+                conn.close()
 
-            try:
-                raw_port = data.get("port")
-                if raw_port is None or str(raw_port).strip() == "":
-                    port = "8080" if ptype in ("web", "static") else ""
-                else:
-                    port = validate_port(raw_port)
-            except ValueError as e:
-                self._send_json({"error": str(e)}, status=400)
-                return
-
-            with STATE_LOCK:
-                cfg = load_config()
-                base_id = slugify(name)
-                app_id = base_id
-                i = 2
-                while app_id in cfg["projects"]:
-                    app_id = f"{base_id}-{i}"
-                    i += 1
-
-                app_dir = APPS_DIR / app_id
-                app_dir.mkdir(parents=True, exist_ok=True)
-                for fname, content in tpl["files"].items():
-                    fpath = safe_join(app_dir, fname)
-                    fpath.parent.mkdir(parents=True, exist_ok=True)
-                    fpath.write_text(content, encoding="utf-8")
-
-                proj = {
-                    "name": name,
-                    "type": ptype,
-                    "entry": (data.get("entry") or tpl["entry"]).strip() or tpl["entry"],
-                    "port": port,
-                    "auto_restart": bool(data.get("auto_restart", True)),
-                    "autostart": bool(data.get("autostart", True)),
-                    "env": {str(k).strip(): str(v) for k, v in data.get("env", {}).items() if str(k).strip()} if isinstance(data.get("env"), dict) else {},
-                }
-                cfg["projects"][app_id] = proj
-                save_config(cfg)
-
-            self._send_json({"project": {**proj, "id": app_id, **SUPERVISOR.status_dict(app_id)}}, status=201)
+            self._json(200, {"success": True})
             return
 
-        parts = [p for p in path.split("/") if p]
-        if len(parts) == 4 and parts[0] == "api" and parts[1] == "projects":
-            app_id = parts[2]
-            if app_id not in cfg["projects"]:
-                self._send_json({"error": "Loyiha topilmadi"}, status=404)
+        if path == "/api/admin/users/delete":
+            if user["role"] != "admin":
+                self._error(403, "Faqat admin uchun")
                 return
-            app_dir = APPS_DIR / app_id
-
-            if parts[3] == "action":
-                try:
-                    data = self._read_json()
-                except Exception:
-                    self._send_json({"error": "Noto'g'ri JSON"}, status=400)
-                    return
-                act = data.get("action")
-                if act == "start":
-                    SUPERVISOR.start(app_id)
-                elif act == "stop":
-                    SUPERVISOR.stop(app_id)
-                elif act == "restart":
-                    SUPERVISOR.restart(app_id)
-                elif act in ("pip_install", "pip_pkg"):
-                    pkg_arg = (data.get("package") or "").strip()
-                    if act == "pip_install":
-                        req_file = app_dir / "requirements.txt"
-                        if not req_file.exists():
-                            self._send_json({"error": "requirements.txt topilmadi"}, status=400)
-                            return
-                        cmd = [SUPERVISOR.get_python_bin(app_dir), "-m", "pip", "install", "-r", "requirements.txt"]
-                    else:
-                        if not pkg_arg or any(ch in pkg_arg for ch in ";&|`$><\n\r"):
-                            self._send_json({"error": "Paket nomi noto'g'ri"}, status=400)
-                            return
-                        try:
-                            pkg_parts = shlex.split(pkg_arg)
-                        except ValueError:
-                            self._send_json({"error": "Paket nomi noto'g'ri"}, status=400)
-                            return
-                        if not pkg_parts:
-                            self._send_json({"error": "Paket nomi noto'g'ri"}, status=400)
-                            return
-                        cmd = [SUPERVISOR.get_python_bin(app_dir), "-m", "pip", "install"] + pkg_parts
-
-                    def _run_pip():
-                        log_path = app_dir / ".panel.log"
-                        pip_env = os.environ.copy()
-                        pip_env["PYTHONUNBUFFERED"] = "1"
-                        append_log(log_path, f"\n[{time.strftime('%H:%M:%S')}] [PIP] {' '.join(cmd)}\n")
-                        try:
-                            p = subprocess.Popen(cmd, cwd=str(app_dir), env=pip_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
-                            assert p.stdout is not None
-                            for line in p.stdout:
-                                append_log(log_path, line)
-                            code = p.wait()
-                            append_log(log_path, f"[{time.strftime('%H:%M:%S')}] [PIP] Tugadi (kod: {code})\n")
-                        except Exception as e:
-                            append_log(log_path, f"[PIP XATO] {e}\n")
-
-                    threading.Thread(target=_run_pip, daemon=True).start()
-                    self._send_json({"ok": True, "message": "Kutubxona o'rnatish boshlandi, loglarni kuzating"})
-                    return
-                else:
-                    self._send_json({"error": "Noma'lum amal"}, status=400)
-                    return
-                self._send_json({"ok": True, **SUPERVISOR.status_dict(app_id)})
+            data = self._read_json()
+            target_id = int(data.get("id") or 0)
+            if target_id == user["id"]:
+                self._error(400, "O'zingizni o'chira olmaysiz")
                 return
 
-            if parts[3] == "upload":
-                rel_dir = qs.get("dir", [""])[0]
-                raw_name = qs.get("name", [""])[0]
-                extract = qs.get("extract", ["0"])[0] == "1"
-                if not raw_name:
-                    self._send_json({"error": "Fayl nomi berilmagan"}, status=400)
-                    return
-                safe_name = Path(raw_name.replace("\\", "/")).name
-                if not safe_name or safe_name in (".", "..", ".panel.log"):
-                    self._send_json({"error": "Fayl nomi yaroqsiz"}, status=400)
-                    return
-                try:
-                    dest_dir = safe_join(app_dir, rel_dir)
-                    dest_file = safe_app_file(dest_dir, safe_name)
-                    if dest_file == dest_dir:
-                        raise ValueError("Fayl nomi yaroqsiz")
-                    raw = self._read_body()
-                except ValueError as e:
-                    self._send_json({"error": str(e)}, status=400)
-                    return
+            with DB_LOCK:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                # Foydalanuvchining loyihalarini to'xtatamiz
+                cur.execute("SELECT id FROM projects WHERE user_id = ?", (target_id,))
+                for row in cur.fetchall():
+                    SUPERVISOR.stop(row["id"])
+                cur.execute("DELETE FROM users WHERE id = ?", (target_id,))
+                conn.commit()
+                conn.close()
 
-                dest_dir.mkdir(parents=True, exist_ok=True)
-                dest_file.write_bytes(raw)
-                extracted = 0
-                if extract and safe_name.lower().endswith(".zip"):
-                    try:
-                        total_extracted = 0
-                        with zipfile.ZipFile(dest_file, "r") as zf:
-                            for member in zf.infolist():
-                                clean_member = member.filename.replace("\\", "/").lstrip("/")
-                                if not clean_member or clean_member in (".", "./"):
-                                    continue
-                                if stat.S_ISLNK(member.external_attr >> 16):
-                                    continue
-                                target = safe_join(dest_dir, clean_member)
-                                if target == (app_dir / ".panel.log").resolve():
-                                    raise ValueError(".panel.log faylini almashtirib bo'lmaydi")
-                                if member.is_dir():
-                                    target.mkdir(parents=True, exist_ok=True)
-                                elif target != dest_dir:
-                                    total_extracted += member.file_size
-                                    if total_extracted > MAX_ZIP_EXTRACT_BYTES:
-                                        raise ValueError("ZIP arxiv ichidagi hajm juda katta (maksimum 128 MB)")
-                                    target.parent.mkdir(parents=True, exist_ok=True)
-                                    with zf.open(member, "r") as src, open(target, "wb") as dst:
-                                        shutil.copyfileobj(src, dst)
-                                    extracted += 1
-                    except Exception as e:
-                        self._send_json({"error": f"ZIP ochishda xato: {e}"}, status=400)
-                        return
-                self._send_json({"ok": True, "file": str(dest_file.relative_to(app_dir)).replace("\\", "/"), "extracted": extracted})
-                return
+            user_dir = APPS_DIR / f"user_{target_id}"
+            if user_dir.exists():
+                shutil.rmtree(user_dir, ignore_errors=True)
 
-        self._send_json({"error": "Topilmadi"}, status=404)
-
-    def do_PUT(self):
-        cfg = self._require_auth()
-        if cfg is None:
+            self._json(200, {"success": True})
             return
-        path = urllib.parse.urlparse(self.path).path
-        parts = [p for p in path.split("/") if p]
-        if len(parts) == 4 and parts[0] == "api" and parts[1] == "projects" and parts[3] == "file":
-            app_id = parts[2]
-            if app_id not in cfg["projects"]:
-                self._send_json({"error": "Loyiha topilmadi"}, status=404)
+
+        if path == "/api/admin/settings":
+            if user["role"] != "admin":
+                self._error(403, "Faqat admin uchun")
                 return
-            try:
-                data = self._read_json()
-            except Exception:
-                self._send_json({"error": "Noto'g'ri JSON"}, status=400)
-                return
-            rel = (data.get("path") or "").strip()
-            if not rel:
-                self._send_json({"error": "Fayl yo'li kiritilmadi"}, status=400)
-                return
-            app_dir = APPS_DIR / app_id
-            try:
-                target = safe_app_file(app_dir, rel)
-            except ValueError as e:
-                self._send_json({"error": str(e)}, status=400)
-                return
-            if target == app_dir.resolve():
-                self._send_json({"error": "Fayl nomi kiritilmadi"}, status=400)
-                return
-            if data.get("is_dir"):
-                target.mkdir(parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(str(data.get("content") or ""), encoding="utf-8")
-            self._send_json({"ok": True})
+            data = self._read_json()
+            for k in ["telegram_bot_token", "telegram_admin_chat_id", "google_client_id", "github_client_id", "default_max_ram_mb"]:
+                if k in data:
+                    set_setting(k, str(data[k]).strip())
+            self._json(200, {"success": True, "message": "Sozlamalar saqlandi!"})
             return
-        self._send_json({"error": "Topilmadi"}, status=404)
 
-    def do_PATCH(self):
-        cfg = self._require_auth()
-        if cfg is None:
-            return
-        path = urllib.parse.urlparse(self.path).path
-        parts = [p for p in path.split("/") if p]
-        if len(parts) == 3 and parts[0] == "api" and parts[1] == "projects":
-            app_id = parts[2]
-            try:
-                data = self._read_json()
-            except Exception:
-                self._send_json({"error": "Noto'g'ri JSON"}, status=400)
-                return
-            with STATE_LOCK:
-                cfg = load_config()
-                if app_id not in cfg["projects"]:
-                    self._send_json({"error": "Loyiha topilmadi"}, status=404)
-                    return
-                proj = cfg["projects"][app_id]
-                if "name" in data:
-                    nm = str(data["name"]).strip()
-                    if not nm:
-                        self._send_json({"error": "Loyiha nomi bo'sh bo'lmasin"}, status=400)
-                        return
-                    proj["name"] = nm
-                if "type" in data:
-                    pt = str(data["type"]).strip()
-                    if pt not in ("bot", "web", "static"):
-                        self._send_json({"error": "Loyiha turi noto'g'ri"}, status=400)
-                        return
-                    proj["type"] = pt
-                if "entry" in data:
-                    ent = str(data["entry"]).strip()
-                    if not ent:
-                        self._send_json({"error": "Entry fayl kiritilmadi"}, status=400)
-                        return
-                    proj["entry"] = ent
-                if "port" in data:
-                    try:
-                        proj["port"] = validate_port(data["port"])
-                    except ValueError as e:
-                        self._send_json({"error": str(e)}, status=400)
-                        return
-                if "auto_restart" in data:
-                    proj["auto_restart"] = bool(data["auto_restart"])
-                if "autostart" in data:
-                    proj["autostart"] = bool(data["autostart"])
-                if "env" in data and isinstance(data["env"], dict):
-                    proj["env"] = {str(k).strip(): str(v) for k, v in data["env"].items() if str(k).strip()}
-                save_config(cfg)
-            self._send_json({"project": {**proj, "id": app_id, **SUPERVISOR.status_dict(app_id)}})
-            return
-        self._send_json({"error": "Topilmadi"}, status=404)
+        self._error(404, "Manzil topilmadi")
 
-    def do_DELETE(self):
-        cfg = self._require_auth()
-        if cfg is None:
-            return
-        parsed = urllib.parse.urlparse(self.path)
-        parts = [p for p in parsed.path.split("/") if p]
-        qs = urllib.parse.parse_qs(parsed.query)
 
-        if len(parts) >= 3 and parts[0] == "api" and parts[1] == "projects":
-            app_id = parts[2]
-            if app_id not in cfg["projects"]:
-                self._send_json({"error": "Loyiha topilmadi"}, status=404)
-                return
-            app_dir = APPS_DIR / app_id
-
-            if len(parts) == 3:
-                SUPERVISOR.stop(app_id)
-                with STATE_LOCK:
-                    cfg = load_config()
-                    cfg["projects"].pop(app_id, None)
-                    save_config(cfg)
-                if app_dir.exists():
-                    shutil.rmtree(app_dir, ignore_errors=True)
-                self._send_json({"ok": True})
-                return
-
-            if len(parts) == 4 and parts[3] == "logs":
-                log_path = app_dir / ".panel.log"
-                with LOG_LOCK:
-                    if log_path.exists():
-                        log_path.write_text("", encoding="utf-8")
-                self._send_json({"ok": True})
-                return
-
-            if len(parts) == 4 and parts[3] == "file":
-                rel = qs.get("path", [""])[0]
-                try:
-                    target = safe_app_file(app_dir, rel)
-                except ValueError as e:
-                    self._send_json({"error": str(e)}, status=400)
-                    return
-                if target == app_dir.resolve() or not target.exists():
-                    self._send_json({"error": "O'chirib bo'lmaydi"}, status=400)
-                    return
-                if target.is_dir():
-                    shutil.rmtree(target)
-                else:
-                    target.unlink()
-                self._send_json({"ok": True})
-                return
-
-        self._send_json({"error": "Topilmadi"}, status=404)
-
+# ==============================================================================
+# MAIN ASYNCHRONOUS SERVER LAUNCHER
+# ==============================================================================
 
 def main():
-    global PANEL_PORT
-    parser = argparse.ArgumentParser(description="Grazajon Host Panel")
-    parser.add_argument("--port", type=int, default=0, help="Panel porti (standart 5000)")
-    parser.add_argument("--set-password", type=str, default="", help="Admin parol o'rnatish")
+    parser = argparse.ArgumentParser(description="Grazajon Host Multi-Tenant Server")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PANEL_PORT", 5000)))
+    parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 
-    cfg = load_config()
-    if args.set_password:
-        h, salt = hash_password(args.set_password)
-        cfg["password_hash"] = h
-        cfg["salt"] = salt
-        save_config(cfg)
-        print("Parol muvaffaqiyatli yangilandi!")
-        return
+    init_db()
 
-    env_pass = os.environ.get("PANEL_PASS", "").strip()
-    if env_pass and not cfg.get("password_hash"):
-        h, salt = hash_password(env_pass)
-        cfg["password_hash"] = h
-        cfg["salt"] = salt
-        save_config(cfg)
+    # Avtostart qilingan loyihalarni qayta ishga tushirish
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, user_id FROM projects WHERE auto_restart = 1")
+        for row in cur.fetchall():
+            try:
+                SUPERVISOR.start(row["id"], row["user_id"])
+            except Exception:
+                pass
+        conn.close()
 
-    port = args.port or int(cfg.get("port", 5000))
-    SUPERVISOR.start_autostarts()
+    server = ThreadingHTTPServer((args.host, args.port), PanelHandler)
+    server.daemon_threads = True
 
-    server = ThreadingHTTPServer(("0.0.0.0", port), PanelHandler)
-    PANEL_PORT = server.server_port
-    ip = get_local_ip()
-    print(f"Grazajon Host Panel ishga tushdi:")
-    print(f"  Mahalliy manzil : http://{ip}:{PANEL_PORT}")
-    print(f"  Localhost       : http://127.0.0.1:{PANEL_PORT}")
-    print(f"  Loyihalar papka : {APPS_DIR}")
+    print("\n" + "="*55)
+    print("  🚀 GRAZAJON HOST MULTI-TENANT PaaS SERVER v2.0")
+    print("="*55)
+    print(f"  Port:      {args.port}")
+    print(f"  Ma'lumot:  {DATA_DIR}")
+    print(f"  Baza:      {DB_FILE} (SQLite3)")
+    print(f"  Himoya:    Anti-Crash RAM Watchdog Faol")
+    print(f"  Mahalliy:  http://localhost:{args.port}")
+    print("="*55 + "\n")
 
-    def shutdown_handler(signum, frame):
-        threading.Thread(target=server.shutdown, daemon=True).start()
-
-    signal.signal(signal.SIGTERM, shutdown_handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nPanel to'xtatilmoqda...")
-    finally:
-        SUPERVISOR.stop_all()
+        print("\n[PANEL] Server to'xtatilmoqda...")
+        for app_id in list(SUPERVISOR.apps.keys()):
+            SUPERVISOR.stop(app_id)
         server.server_close()
 
 
