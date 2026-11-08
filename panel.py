@@ -154,6 +154,57 @@ def init_db():
         )
         """)
 
+        # 5. Hosting Plans table (7 ta sozlanadigan tarif)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS plans (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            price TEXT NOT NULL,
+            price_num INTEGER NOT NULL DEFAULT 0,
+            badge TEXT NOT NULL DEFAULT '',
+            sticker TEXT NOT NULL DEFAULT '💎',
+            ram_mb INTEGER NOT NULL DEFAULT 256,
+            max_projects INTEGER NOT NULL DEFAULT 1,
+            cpu_limit TEXT NOT NULL DEFAULT '0.5 Core',
+            disk_mb INTEGER NOT NULL DEFAULT 512,
+            features_json TEXT NOT NULL DEFAULT '[]',
+            telegram_link TEXT NOT NULL DEFAULT 'https://t.me/graza_b',
+            sort_order INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 1
+        )
+        """)
+
+        # 7 ta tarifni tekshirib kiritish
+        cur.execute("SELECT COUNT(*) as c FROM plans")
+        if cur.fetchone()["c"] == 0:
+            default_plans = [
+                ("starter", "Starter Test", "0 so'm / oy", 0, "BEPUL SINOV", "🌱", 256, 1, "0.3 Core", 512,
+                 json.dumps(["1 ta Telegram Bot yoki API", "256 MB RAM tezlik", "500 MB NVMe xotira", "Avtomatik qayta yoqish", "SSL himoyasi & HTTPS", "Hamjamiyat yordami"], ensure_ascii=False),
+                 "https://t.me/graza_b", 1, 1),
+                ("lite", "Lite Tezkor", "19,000 so'm / oy", 19000, "OQIL TANLOV", "⚡", 1024, 3, "0.75 Core", 2048,
+                 json.dumps(["3 ta Faol Loyiha / Bot", "1 GB RAM tezkor xotira", "2 GB NVMe SSD", "24/7 Fon rejimida ishlash", "Telegram xabarnomalar", "Avto-restart tizimi"], ensure_ascii=False),
+                 "https://t.me/graza_b", 2, 1),
+                ("pro", "Pro Developer", "39,000 so'm / oy", 39000, "ENG OMMABOP", "🚀", 2048, 7, "1.5 Core", 5120,
+                 json.dumps(["7 ta Loyiha (Bot, Flask, FastAPI)", "2 GB DDR4 RAM", "5 GB NVMe SSD", "99.9% Uptime kafolati", "Jonli loglar & Fayl boshqaruvchi", "Ustuvor Telegram ko'mak: @graza_b"], ensure_ascii=False),
+                 "https://t.me/graza_b", 3, 1),
+                ("turbo", "Turbo Speed", "69,000 so'm / oy", 69000, "YUQORI TEZLIK", "🔥", 4096, 15, "2.5 Core", 10240,
+                 json.dumps(["15 ta Og'ir Loyiha / Userbot", "4 GB Yuqori chastotali RAM", "10 GB NVMe SSD xotira", "Tezkor tarmoq kanali (1 Gbps)", "Avtomatik zaxira nusxasi (Backup)", "Admin shaxsiy ko'mak: @graza_b"], ensure_ascii=False),
+                 "https://t.me/graza_b", 4, 1),
+                ("business", "Business Premium", "119,000 so'm / oy", 119000, "BIZNES VA JAMOALAR", "💎", 8192, 30, "4.0 Core", 25600,
+                 json.dumps(["30 ta Istalgan loyiha & API", "8 GB Kuchli RAM", "25 GB High-Speed NVMe", "Maxsus Port & Domen bog'lash", "DDoS hujumlaridan himoya", "24/7 Shaxsiy VIP yordam: @graza_b"], ensure_ascii=False),
+                 "https://t.me/graza_b", 5, 1),
+                ("ultra", "Ultra VIP", "199,000 so'm / oy", 199000, "VIP STATUS", "👑", 16384, 60, "8.0 Core", 51200,
+                 json.dumps(["60 ta Katta masshtabli loyiha", "16 GB Gigant RAM", "50 GB NVMe SSD", "Dedicated CPU resurslari", "Kengaytirilgan API monitoring", "To'g'ridan-to'g'ri bog'lanish: @graza_b"], ensure_ascii=False),
+                 "https://t.me/graza_b", 6, 1),
+                ("infinity", "Infinity Luxe", "349,000 so'm / oy", 349000, "LIMITSIZ CHEKSIZ", "🪐", 32768, 999, "16 Core Max", 153600,
+                 json.dumps(["Cheksiz Loyihalar va Botlar", "32 GB Monster RAM", "150 GB Ultra NVMe", "Alohida ajratilgan Cloud tunnel", "7000$ Lik VIP Server arxitekturasi", "Bosh administrator @graza_b nazorati"], ensure_ascii=False),
+                 "https://t.me/graza_b", 7, 1),
+            ]
+            cur.executemany("""
+            INSERT INTO plans (id, name, price, price_num, badge, sticker, ram_mb, max_projects, cpu_limit, disk_mb, features_json, telegram_link, sort_order, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, default_plans)
+
         conn.commit()
 
         # Behkruz ni asosiy administrator (admin) sifatida sozlash
@@ -361,6 +412,103 @@ def db_delete_session(token: str):
         cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
         conn.close()
+
+
+def db_get_plans():
+    """Barcha 7 ta tarifni tartib bilan olish"""
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM plans ORDER BY sort_order ASC, price_num ASC")
+        rows = cur.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["features"] = json.loads(d["features_json"])
+            except Exception:
+                d["features"] = []
+            result.append(d)
+        return result
+
+
+def db_get_plan(plan_id: str):
+    """Bitta tarifni ID bo'yicha olish"""
+    if not plan_id:
+        return None
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM plans WHERE id = ? COLLATE NOCASE", (plan_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["features"] = json.loads(d["features_json"])
+        except Exception:
+            d["features"] = []
+        return d
+
+
+def db_update_plan(plan_id: str, data: dict) -> bool:
+    """Tarif ma'lumotlarini yangilash (Behkruz admin tomonidan)"""
+    if not plan_id:
+        return False
+    with DB_LOCK:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM plans WHERE id = ? COLLATE NOCASE", (plan_id,))
+        existing = cur.fetchone()
+        if not existing:
+            conn.close()
+            return False
+
+        name = str(data.get("name") if data.get("name") is not None else existing["name"]).strip()
+        price = str(data.get("price") if data.get("price") is not None else existing["price"]).strip()
+        badge = str(data.get("badge") if data.get("badge") is not None else existing["badge"]).strip()
+        sticker = str(data.get("sticker") if data.get("sticker") is not None else existing["sticker"]).strip()
+        
+        try:
+            ram_mb = int(data.get("ram_mb") if data.get("ram_mb") is not None else existing["ram_mb"])
+        except Exception:
+            ram_mb = existing["ram_mb"]
+            
+        try:
+            max_projects = int(data.get("max_projects") if data.get("max_projects") is not None else existing["max_projects"])
+        except Exception:
+            max_projects = existing["max_projects"]
+
+        cpu_limit = str(data.get("cpu_limit") if data.get("cpu_limit") is not None else existing["cpu_limit"]).strip()
+        try:
+            disk_mb = int(data.get("disk_mb") if data.get("disk_mb") is not None else existing["disk_mb"])
+        except Exception:
+            disk_mb = existing["disk_mb"]
+
+        features = data.get("features")
+        if features is not None:
+            if isinstance(features, list):
+                features_json = json.dumps(features, ensure_ascii=False)
+            elif isinstance(features, str):
+                lines = [line.strip() for line in features.splitlines() if line.strip()]
+                features_json = json.dumps(lines, ensure_ascii=False)
+            else:
+                features_json = existing["features_json"]
+        else:
+            features_json = existing["features_json"]
+
+        cur.execute("""
+        UPDATE plans SET
+            name = ?, price = ?, badge = ?, sticker = ?,
+            ram_mb = ?, max_projects = ?, cpu_limit = ?, disk_mb = ?,
+            features_json = ?
+        WHERE id = ? COLLATE NOCASE
+        """, (name, price, badge, sticker, ram_mb, max_projects, cpu_limit, disk_mb, features_json, plan_id))
+        conn.commit()
+        conn.close()
+        return True
 
 
 # ==============================================================================
@@ -896,6 +1044,17 @@ class PanelHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        # 1.5. Hosting Tariflari ro'yxati (7 ta sozlanadigan tarif - barchaga ochiq)
+        if path == "/api/plans":
+            plans = db_get_plans()
+            self._json(200, {
+                "success": True,
+                "plans": plans,
+                "telegram_admin": "@graza_b",
+                "telegram_url": "https://t.me/graza_b"
+            })
+            return
+
         # 2. Joriy foydalanuvchi ma'lumotlari
         if path == "/api/auth/me":
             user = self._get_current_user()
@@ -1417,12 +1576,34 @@ class PanelHandler(BaseHTTPRequestHandler):
         # 4.5. Tarif buyurtmasi (Plans Order)
         if path == "/api/plans/order":
             data = self._read_json()
-            plan = data.get("plan", "PRO")
-            phone = data.get("phone", "")
-            username = data.get("username", "Mijoz")
-            alert = f"💎 <b>Yangi Tarif Buyurtmasi!</b>\n👤 Foydalanuvchi: <code>{username}</code>\n📦 Tarif: <b>{plan.upper()}</b>\n📱 Tel: <code>{phone}</code>\n🌐 Sayt: https://slowstax.uz"
+            plan_id = str(data.get("plan") or "pro").strip().lower()
+            phone = str(data.get("phone") or "").strip()
+            username = str(data.get("username") or "Mijoz").strip()
+            note = str(data.get("note") or "").strip()
+
+            plan_obj = db_get_plan(plan_id)
+            plan_name = plan_obj["name"] if plan_obj else plan_id.upper()
+            plan_price = plan_obj["price"] if plan_obj else "Kompaniya narxida"
+            plan_sticker = plan_obj.get("sticker", "💎") if plan_obj else "💎"
+
+            alert = (
+                f"{plan_sticker} <b>Yangi Tarif Buyurtmasi!</b>\n\n"
+                f"📦 <b>Tarif:</b> {plan_name} ({plan_id.upper()})\n"
+                f"💰 <b>Narxi:</b> {plan_price}\n"
+                f"👤 <b>Foydalanuvchi:</b> <code>{username}</code>\n"
+                f"📱 <b>Bog'lanish:</b> <code>{phone or 'Kiritilmadi'}</code>\n"
+                f"📝 <b>Izoh:</b> {note or 'Mijoz ulanish istagini bildirdi'}\n"
+                f"👑 <b>Admin Lichka:</b> https://t.me/graza_b\n"
+                f"🌐 <b>Sayt:</b> https://slowstax.uz\n"
+                f"🕒 <b>Vaqt:</b> {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
             send_telegram_alert(alert)
-            self._json(200, {"success": True, "message": f"{plan.upper()} tarifi bo'yicha buyurtmangiz qabul qilindi! Admin (Behkruz) tez orada siz bilan bog'lanadi."})
+            self._json(200, {
+                "success": True,
+                "message": f"{plan_name} tarifi bo'yicha so'rovingiz qabul qilindi! Bosh administrator @graza_b siz bilan tezda bog'lanadi.",
+                "telegram_admin": "@graza_b",
+                "telegram_url": "https://t.me/graza_b"
+            })
             return
 
         # Qolgan barcha amallar uchun foydalanuvchi tizimga kirgan bo'lishi shart!
@@ -1764,6 +1945,30 @@ class PanelHandler(BaseHTTPRequestHandler):
                 if k in data:
                     set_setting(k, str(data[k]).strip())
             self._json(200, {"success": True, "message": "Sozlamalar saqlandi!"})
+            return
+
+        # 12. Admin: 7 ta tarifni sozlash va narxlarini belgilash (Behkruz)
+        if path == "/api/admin/plans/update":
+            if user["role"] != "admin":
+                self._error(403, "Faqat administrator uchun")
+                return
+            data = self._read_json()
+            plan_id = str(data.get("id") or "").strip().lower()
+            if not plan_id:
+                self._error(400, "Tarif ID ko'rsatilmadi")
+                return
+
+            ok = db_update_plan(plan_id, data)
+            if not ok:
+                self._error(404, "Tarif topilmadi")
+                return
+
+            updated = db_get_plan(plan_id)
+            self._json(200, {
+                "success": True,
+                "message": f"'{updated['name']}' tarifi muvaffaqiyatli saqlandi!",
+                "plan": updated
+            })
             return
 
         self._error(404, "Manzil topilmadi")

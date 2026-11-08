@@ -825,9 +825,226 @@
       font-size: 11px;
       text-transform: uppercase;
     }
-    .admin-table td {
-      padding: 12px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    /* TELEGRAM ADMIN HEADER BUTTON */
+    .tg-admin-header-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 14px;
+      border-radius: var(--radius-full);
+      background: linear-gradient(135deg, rgba(36, 161, 222, 0.18), rgba(0, 245, 212, 0.12));
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.25s var(--ease-out);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.15);
+      backdrop-filter: blur(10px);
+    }
+    .tg-admin-header-btn:hover {
+      background: linear-gradient(135deg, rgba(36, 161, 222, 0.35), rgba(0, 245, 212, 0.25));
+      border-color: #38bdf8;
+      color: #ffffff;
+      transform: translateY(-2px);
+      box-shadow: 0 0 22px rgba(56, 189, 248, 0.4);
+    }
+
+    /* TELEGRAM PREMIUM 3D ANIMATED STICKERS & BADGES */
+    @keyframes tgFloat {
+      0%, 100% {
+        transform: translateY(0px) scale(1) rotate(0deg);
+      }
+      50% {
+        transform: translateY(-8px) scale(1.08) rotate(3deg);
+      }
+    }
+    @keyframes tgGlowPulse {
+      0%, 100% {
+        filter: drop-shadow(0 0 12px rgba(0, 245, 212, 0.35)) drop-shadow(0 0 20px rgba(59, 130, 246, 0.2));
+      }
+      50% {
+        filter: drop-shadow(0 0 22px rgba(0, 245, 212, 0.75)) drop-shadow(0 0 35px rgba(168, 85, 247, 0.45));
+      }
+    }
+    @keyframes tgShimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .tg-premium-sticker-wrapper {
+      position: relative;
+      width: 70px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px auto;
+    }
+    .tg-premium-sticker-halo {
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 245, 212, 0.2) 0%, rgba(99, 102, 241, 0.12) 50%, transparent 70%);
+      animation: tgGlowPulse 4s infinite ease-in-out;
+      pointer-events: none;
+    }
+    .tg-premium-sticker {
+      font-size: 42px;
+      line-height: 1;
+      display: inline-block;
+      animation: tgFloat 3.6s ease-in-out infinite;
+      user-select: none;
+      position: relative;
+      z-index: 2;
+      transition: transform 0.3s var(--ease-out);
+    }
+    .plan-card-7:hover .tg-premium-sticker {
+      transform: scale(1.18) rotate(-5deg);
+    }
+
+    .tg-premium-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 11px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border-radius: var(--radius-full);
+      background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.14);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .tg-premium-badge::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+      background-size: 200% 100%;
+      animation: tgShimmer 3s infinite linear;
+    }
+
+    /* 7 PLANS RESPONSIVE GRID */
+    .plans-grid-7 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 22px;
+      align-items: stretch;
+    }
+    @media (min-width: 1400px) {
+      .plans-grid-7 {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .plan-card-7 {
+      background: var(--bg-card);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 22px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      transition: all 0.35s var(--ease-out);
+      overflow: hidden;
+    }
+    .plan-card-7::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: transparent;
+      transition: background 0.3s;
+    }
+    .plan-card-7:hover {
+      transform: translateY(-7px);
+      border-color: rgba(0, 245, 212, 0.35);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45), 0 0 30px rgba(0, 245, 212, 0.12);
+    }
+    .plan-card-7:hover::after {
+      background: linear-gradient(90deg, var(--accent), var(--primary));
+    }
+
+    .plan-tier-starter::after { background: #10b981; }
+    .plan-tier-lite::after { background: #38bdf8; }
+    .plan-tier-pro { border-color: rgba(59, 130, 246, 0.35); }
+    .plan-tier-pro::after { background: linear-gradient(90deg, #3b82f6, #00f5d4); }
+    .plan-tier-turbo { border-color: rgba(249, 115, 22, 0.35); }
+    .plan-tier-turbo::after { background: linear-gradient(90deg, #f97316, #ef4444); }
+    .plan-tier-business { border-color: rgba(0, 245, 212, 0.4); background: linear-gradient(180deg, rgba(0, 245, 212, 0.06) 0%, rgba(14, 19, 31, 0.8) 100%); }
+    .plan-tier-business::after { background: linear-gradient(90deg, #00f5d4, #3b82f6); }
+    .plan-tier-ultra { border-color: rgba(245, 158, 11, 0.4); background: linear-gradient(180deg, rgba(245, 158, 11, 0.07) 0%, rgba(14, 19, 31, 0.8) 100%); }
+    .plan-tier-ultra::after { background: linear-gradient(90deg, #f59e0b, #ec4899); }
+    .plan-tier-infinity { border-color: rgba(168, 85, 247, 0.5); background: linear-gradient(180deg, rgba(168, 85, 247, 0.1) 0%, rgba(14, 19, 31, 0.85) 100%); box-shadow: 0 10px 30px rgba(168, 85, 247, 0.15); }
+    .plan-tier-infinity::after { background: linear-gradient(90deg, #a855f7, #6366f1, #00f5d4); }
+
+    .plan-card-spec-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 16px 0;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+    }
+    .plan-spec-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .plan-spec-label {
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .plan-spec-val {
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* ADMIN PLANS TABS & EDITOR */
+    .admin-plans-selector {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+    }
+    .admin-plan-pill {
+      padding: 8px 14px;
+      border-radius: var(--radius-full);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .admin-plan-pill:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .admin-plan-pill.active {
+      background: rgba(0, 245, 212, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
     }
   </style>
 </head>
@@ -860,9 +1077,15 @@
         </button>
       </nav>
 
-      <div class="user-profile" id="userProfileArea">
-        <button class="btn btn-secondary btn-sm" onclick="openAuthModal('login')">Kirish</button>
-        <button class="btn btn-primary btn-sm" onclick="openAuthModal('register')">Ro'yxatdan o'tish</button>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <a href="https://t.me/graza_b" target="_blank" rel="noopener noreferrer" class="tg-admin-header-btn" title="Telegramda Bosh Administrator bilan bog'lanish">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.458c.538-.196 1.006.128.832.923z"/></svg>
+          <span>Admin: @graza_b</span>
+        </a>
+        <div class="user-profile" id="userProfileArea">
+          <button class="btn btn-secondary btn-sm" onclick="openAuthModal('login')">Kirish</button>
+          <button class="btn btn-primary btn-sm" onclick="openAuthModal('register')">Ro'yxatdan o'tish</button>
+        </div>
       </div>
     </header>
 
@@ -962,54 +1185,24 @@
       </div>
     </div>
 
-    <!-- TAB 2: PLANS -->
+    <!-- TAB 2: PLANS (7 TA SOZLANADIGAN TARIF) -->
     <div id="tabPlans" style="display:none;">
-      <div class="section-header">
-        <div class="section-title">💎 Hosting Tariflari</div>
+      <div style="text-align: center; max-width: 800px; margin: 0 auto 32px; padding: 10px 0;">
+        <div class="tg-premium-badge" style="margin-bottom: 14px; background: rgba(0, 245, 212, 0.12); border-color: rgba(0, 245, 212, 0.35); color: var(--accent);">
+          <span>💎 TELEGRAM PREMIUM 3D HOSTING PLATFORMASI</span>
+        </div>
+        <h2 style="font-family: var(--font-display); font-size: 32px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px;">
+          7 ta Moslashuvchan va Yuqori Tezlikdagi Hosting Tarifi
+        </h2>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7;">
+          Barcha tariflar avtonom Anti-Crash nazoratchisi, yuqori tezlikdagi NVMe xotira va uzluksiz 24/7 ishlash kafolati bilan ta'minlangan.<br>
+          Savollar, to'lovlar yoki individual arxitektura bo'yicha bosh admin bilan bog'laning: 
+          <a href="https://t.me/graza_b" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; font-weight: 600; text-decoration: underline;">@graza_b</a>
+        </p>
       </div>
-      <div class="projects-grid">
-        <div class="metric-card" style="padding: 28px;">
-          <h3 style="font-size: 20px; font-weight: 700;">STARTER (Bepul)</h3>
-          <p style="color: var(--text-muted); font-size: 13px; margin: 10px 0 20px;">Dastlabki botlar va sinov uchun</p>
-          <div style="font-size: 28px; font-weight: 700; color: var(--accent); margin-bottom: 20px;">0 so'm <span style="font-size: 13px; color: var(--text-muted);">/ doimiy</span></div>
-          <ul style="font-size: 13px; color: var(--text-muted); line-height: 2; margin-bottom: 24px; list-style: none;">
-            <li>✓ 3 tagacha Python bot / sayt</li>
-            <li>✓ 150 MB RAM (Anti-Crash limit)</li>
-            <li>✓ Avto-restart nazorati</li>
-            <li>✓ Onlayn Kod muharriri va Loglar</li>
-          </ul>
-          <button class="btn btn-secondary" style="width: 100%;" disabled>Joriy Tarif</button>
-        </div>
 
-        <div class="metric-card" style="padding: 28px; border-color: rgba(59, 130, 246, 0.4);">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-size: 20px; font-weight: 700;">PRO</h3>
-            <span class="brand-badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: rgba(59, 130, 246, 0.4);">Ommabop</span>
-          </div>
-          <p style="color: var(--text-muted); font-size: 13px; margin: 10px 0 20px;">Katta botlar va doimiy mijozlar uchun</p>
-          <div style="font-size: 28px; font-weight: 700; color: #60a5fa; margin-bottom: 20px;">25 000 so'm <span style="font-size: 13px; color: var(--text-muted);">/ oy</span></div>
-          <ul style="font-size: 13px; color: var(--text-muted); line-height: 2; margin-bottom: 24px; list-style: none;">
-            <li>✓ 8 tagacha bot / veb-sayt</li>
-            <li>✓ 350 MB RAM limit</li>
-            <li>✓ Yuqori CPU ustuvorligi</li>
-            <li>✓ Maxsus Telegram qo'llab-quvvatlash</li>
-          </ul>
-          <button class="btn btn-primary" style="width: 100%;" onclick="openPlanOrderModal('PRO', '25 000 so\'m / oy')">💎 Ulanish</button>
-        </div>
-
-        <div class="metric-card" style="padding: 28px; border-color: rgba(245, 158, 11, 0.4);">
-          <h3 style="font-size: 20px; font-weight: 700;">VIP BIZNES</h3>
-          <p style="color: var(--text-muted); font-size: 13px; margin: 10px 0 20px;">Tijoriy loyihalar va cheksiz imkoniyat</p>
-          <div style="font-size: 28px; font-weight: 700; color: #f59e0b; margin-bottom: 20px;">60 000 so'm <span style="font-size: 13px; color: var(--text-muted);">/ oy</span></div>
-          <ul style="font-size: 13px; color: var(--text-muted); line-height: 2; margin-bottom: 24px; list-style: none;">
-            <li>✓ 20 tagacha bot / loyiha</li>
-            <li>✓ 800 MB - 1 GB RAM limit</li>
-            <li>✓ Shaxsiy domen ulash</li>
-            <li>✓ 24/7 Monitoring</li>
-          </ul>
-          <button class="btn btn-secondary" style="width: 100%; border-color: #f59e0b; color: #f59e0b;" onclick="openPlanOrderModal('VIP BIZNES', '60 000 so\'m / oy')">👑 Ulanish</button>
-
-        </div>
+      <div class="plans-grid-7" id="plansGridContainer">
+        <!-- Javascript loadPlans() orqali 7 ta jonli tarif kartalari yuklanadi -->
       </div>
     </div>
 
@@ -1085,6 +1278,108 @@
               <!-- JS orqali to'ldiriladi -->
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 7 TA TARIFNI BOSHQARISH VA NARXLARINI BELGILASH (BEHKRUZ ADMIN) -->
+      <div class="core-card" style="min-height: auto; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+              <span>💎</span> 7 ta Hosting Tariflarini Boshqarish va Narxlarini Belgilash
+            </h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+              Istalgan tarif narxini, nomini, RAM limitini va Telegram stikerini shu yerdan jonli o'zgartiring.
+            </p>
+          </div>
+          <span class="tg-premium-badge" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.35); color: #f59e0b;">
+            👑 Bosh Administrator: @graza_b
+          </span>
+        </div>
+
+        <!-- 7 ta tarif selektori (Pills) -->
+        <div class="admin-plans-selector" id="adminPlansTabs">
+          <!-- JS orqali to'ldiriladi -->
+        </div>
+
+        <!-- Tanlangan tarifni tahrirlash oynasi -->
+        <div id="adminPlanEditorBox" style="margin-top: 18px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span id="planEditStickerPreview" style="font-size: 32px; filter: drop-shadow(0 0 12px var(--accent));">💎</span>
+              <div>
+                <h4 id="planEditHeading" style="font-size: 16px; font-weight: 700;">PRO DEVELOPER</h4>
+                <div style="font-size: 12px; color: var(--text-muted);">Tarif ID: <code id="planEditIdDisplay" style="color:var(--accent); font-weight:700;">pro</code></div>
+              </div>
+            </div>
+            <span class="plan-tag" id="planEditBadgeDisplay">ENG OMMABOP</span>
+          </div>
+
+          <input type="hidden" id="planEditId" value="pro">
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+            <div class="form-group">
+              <label class="form-label">Tarif Nomi</label>
+              <input type="text" class="form-input" id="planEditName" placeholder="Masalan: Pro Developer">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Oylik Narxi (Ko'rinadigan matn)</label>
+              <input type="text" class="form-input" id="planEditPrice" placeholder="Masalan: 39,000 so'm / oy">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Telegram Premium Stiker (Emoji)</label>
+              <select class="form-input" id="planEditSticker" onchange="document.getElementById('planEditStickerPreview').textContent = this.value">
+                <option value="🌱">🌱 Starter Test (Urug')</option>
+                <option value="⚡">⚡ Lite (Yashin)</option>
+                <option value="🚀">🚀 Pro (Raketa)</option>
+                <option value="🔥">🔥 Turbo (Olov)</option>
+                <option value="💎">💎 Business (Olmos)</option>
+                <option value="👑">👑 Ultra VIP (Toj)</option>
+                <option value="🪐">🪐 Infinity Luxe (Saturn)</option>
+                <option value="🛸">🛸 Gravitatsiya (NLO)</option>
+                <option value="🛡️">🛡️ Xavfsizlik Qalqoni</option>
+                <option value="⭐">⭐ Yulduz</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Badge Matni (Belgi)</label>
+              <input type="text" class="form-input" id="planEditBadge" placeholder="Masalan: ENG OMMABOP">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">RAM Limiti (MB)</label>
+              <input type="number" class="form-input" id="planEditRam" placeholder="2048">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Maksimal Loyihalar soni</label>
+              <input type="number" class="form-input" id="planEditProjects" placeholder="7">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">CPU Quvvati</label>
+              <input type="text" class="form-input" id="planEditCpu" placeholder="1.5 Core">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">NVMe SSD Xotira (MB)</label>
+              <input type="number" class="form-input" id="planEditDisk" placeholder="5120">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 14px;">
+            <label class="form-label">Xususiyatlar ro'yxati (Har bir qatorda bittadan xususiyat)</label>
+            <textarea class="form-input" id="planEditFeatures" rows="4" style="font-family: var(--font-mono); font-size: 12px;" placeholder="7 ta Loyiha (Bot, Flask, FastAPI)&#10;2 GB DDR4 RAM&#10;5 GB NVMe SSD&#10;Ustuvor Telegram ko'mak: @graza_b"></textarea>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+            <button class="btn btn-primary" onclick="saveAdminPlan()">
+              💾 Saqlash va Jonli Yangilash
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1173,19 +1468,27 @@
   <div class="modal-backdrop" id="orderPlanModal">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="orderPlanTitle">💎 Tarifga Ulanish</h3>
+        <h3 id="orderPlanTitle" style="display: flex; align-items: center; gap: 8px;">
+          <span id="orderPlanStickerIcon">💎</span>
+          <span id="orderPlanHeadingText">Tarifga Ulanish</span>
+        </h3>
         <button class="modal-close" onclick="closeModal('orderPlanModal')">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-weight: 700; font-size: 16px; color: var(--accent);" id="orderPlanBadge">PRO</span>
-            <span style="font-weight: 700; font-size: 16px;" id="orderPlanPrice">25 000 so'm / oy</span>
+            <span class="tg-premium-badge" id="orderPlanBadge">PRO</span>
+            <span style="font-weight: 700; font-size: 18px; color: var(--accent); font-family: var(--font-mono);" id="orderPlanPrice">39,000 so'm / oy</span>
           </div>
-          <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;" id="orderPlanDesc">
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;" id="orderPlanDesc">
             Ko'proq RAM, tezkor server yadrosi va VIP qo'llab-quvvatlash.
           </p>
         </div>
+
+        <a id="orderPlanTgDirectBtn" href="https://t.me/graza_b" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%; margin-bottom: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: #38bdf8; color: #38bdf8; background: rgba(56, 189, 248, 0.08); text-decoration: none;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.458c.538-.196 1.006.128.832.923z"/></svg>
+          💬 Telegramda Admin @graza_b ga Yozish
+        </a>
 
         <div class="form-group">
           <label class="form-label">Telefon Raqamingiz yoki Telegram username</label>
@@ -1199,8 +1502,114 @@
         </div>
 
         <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="submitPlanOrder()">
-          🚀 Buyurtma Berish
+          🚀 Buyurtmani Tasdiqlash
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SOCIAL QUICK AUTH MODAL (No prompt!) -->
+  <div class="modal-backdrop" id="socialModal">
+    <div class="modal-card" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 id="socialModalTitle" style="display:flex; align-items:center; gap:8px;">
+          <span id="socialModalIcon">🌐</span>
+          <span id="socialModalHeading">Google orqali kirish</span>
+        </h3>
+        <button class="modal-close" onclick="closeModal('socialModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+          Profilingiz uchun taxallus (login) kiriting yoki standart nom bilan 1-bosishda davom eting:
+        </p>
+        <div class="form-group">
+          <label class="form-label">Ismingiz yoki Profilingiz</label>
+          <input type="text" class="form-input" id="socialUserNameInput" placeholder="Masalan: Foydalanuvchi">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 16px;">
+          <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('socialModal')">Bekor qilish</button>
+          <button class="btn btn-primary" style="flex: 2;" id="socialSubmitBtn" onclick="submitSocialLogin()">🚀 Davom etish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW FILE MODAL (No prompt!) -->
+  <div class="modal-backdrop" id="newFileModal">
+    <div class="modal-card" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3>📄 Yangi Fayl Yaratish</h3>
+        <button class="modal-close" onclick="closeModal('newFileModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Fayl Nomi</label>
+          <input type="text" class="form-input" id="newFileNameInput" placeholder="masalan: config.py yoki bot.py">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 16px;">
+          <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('newFileModal')">Bekor qilish</button>
+          <button class="btn btn-primary" style="flex: 1;" onclick="submitNewFile()">Yaratish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT USER MODAL (ADMIN) (No prompt!) -->
+  <div class="modal-backdrop" id="editUserModal">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>⚙️ Mijoz Tarifini Sozlash</h3>
+        <button class="modal-close" onclick="closeModal('editUserModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editUserId">
+        <div class="form-group">
+          <label class="form-label">Foydalanuvchi</label>
+          <input type="text" class="form-input" id="editUserName" disabled style="opacity: 0.7;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tarif</label>
+          <select class="form-input" id="editUserPlan">
+            <option value="starter">Starter</option>
+            <option value="lite">Lite</option>
+            <option value="pro">Pro</option>
+            <option value="turbo">Turbo</option>
+            <option value="business">Business</option>
+            <option value="ultra">Ultra</option>
+            <option value="infinity">Infinity</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">RAM Limiti (MB)</label>
+          <input type="number" class="form-input" id="editUserRam" placeholder="256">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Maksimal Loyihalar soni</label>
+          <input type="number" class="form-input" id="editUserProjects" placeholder="3">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 16px;">
+          <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('editUserModal')">Bekor qilish</button>
+          <button class="btn btn-primary" style="flex: 1;" onclick="submitEditUser()">Saqlash</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM ACTION MODAL (No native confirm!) -->
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal-card" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 id="confirmModalTitle">⚠️ Tasdiqlash</h3>
+        <button class="modal-close" onclick="closeModal('confirmModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmModalMessage" style="color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+          Haqiqatan ham ushbu amalni bajarmoqchimisiz?
+        </p>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('confirmModal')">Bekor qilish</button>
+          <button class="btn btn-danger" style="flex: 1;" id="confirmModalActionBtn" onclick="executeConfirmedAction()">Ha, Bajarish</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1376,7 +1785,11 @@
         if (tabEl) tabEl.style.display = (t === tabName) ? "block" : "none";
         if (navEl) navEl.classList.toggle("active", t === tabName);
       });
-      if (tabName === "admin") loadAdminDashboard();
+      if (tabName === "plans") loadPlans();
+      if (tabName === "admin") {
+        loadAdminDashboard();
+        loadAdminPlans();
+      }
     }
 
     // Tizim holatini yuklash (Faqat Admin uchun)
@@ -1476,25 +1889,45 @@
     }
 
 
-    // Google va GitHub orqali kirish
-    async function triggerSocialAuth(provider) {
-      const defaultName = (provider === "google") ? "Google Foydalanuvchi" : "GitHub Foydalanuvchi";
-      const name = prompt(`${provider.toUpperCase()} orqali kirish:
-Ismingiz yoki profilingiz nomini kiriting:`, defaultName);
-      if (name === null) return;
+    // Google va GitHub orqali kirish (Modal orqali - prompt yo'q!)
+    let currentSocialProvider = "google";
+    function openSocialModal(provider) {
+      currentSocialProvider = provider;
+      const heading = (provider === "google") ? "Google orqali kirish" : "GitHub orqali kirish";
+      const icon = (provider === "google") ? "🌐" : "🐙";
+      const defaultName = (provider === "google") ? "Google_Foydalanuvchi" : "GitHub_Foydalanuvchi";
+      
+      const headEl = document.getElementById("socialModalHeading");
+      const iconEl = document.getElementById("socialModalIcon");
+      const inputEl = document.getElementById("socialUserNameInput");
+      
+      if (headEl) headEl.textContent = heading;
+      if (iconEl) iconEl.textContent = icon;
+      if (inputEl) inputEl.value = defaultName;
+      
+      openModal("socialModal");
+    }
+
+    async function submitSocialLogin() {
+      const provider = currentSocialProvider;
+      const inputEl = document.getElementById("socialUserNameInput");
+      const defaultName = (provider === "google") ? "Google_Foydalanuvchi" : "GitHub_Foydalanuvchi";
+      const name = (inputEl && inputEl.value.trim()) ? inputEl.value.trim() : defaultName;
+      
       try {
         const res = await fetch("/api/auth/social_demo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: provider,
-            name: name || defaultName,
-            email: `${(name || defaultName).replace(/\s+/g, "").toLowerCase()}@${provider}.com`
+            name: name,
+            email: `${name.replace(/\s+/g, "").toLowerCase()}@${provider}.com`
           })
         });
         const data = await res.json();
         if (data.success) {
-          showToast(data.message || `${provider} orqali kirdingiz!`, "success");
+          showToast(data.message || `${provider.toUpperCase()} orqali muvaffaqiyatli kirdingiz!`, "success");
+          closeModal("socialModal");
           closeModal("authModal");
           await checkAuth();
         } else {
@@ -1506,11 +1939,11 @@ Ismingiz yoki profilingiz nomini kiriting:`, defaultName);
     }
 
     function triggerGoogleAuth() {
-      triggerSocialAuth("google");
+      openSocialModal("google");
     }
 
     function triggerGithubAuth() {
-      triggerSocialAuth("github");
+      openSocialModal("github");
     }
 
     // Auth Modal tablari
@@ -1749,24 +2182,29 @@ Ushbu faylni xavfsiz saqlang!
       }
     }
 
-    async function deleteProject(id) {
-      if (!confirm("Haqiqatdan ham bu loyihani butunlay o'chirmoqchimisiz?")) return;
-      try {
-        const res = await fetch("/api/projects/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id })
-        });
-        const d = await res.json();
-        if (d.success) {
-          showToast("Loyiha o'chirildi");
-          loadProjects();
-        } else {
-          showToast(d.error || "O'chirishda xato", "error");
+    function deleteProject(id) {
+      showConfirmModal(
+        "Loyihani O'chirish",
+        "Haqiqatan ham bu loyihani va uning barcha fayllarini butunlay o'chirmoqchimisiz?",
+        async () => {
+          try {
+            const res = await fetch("/api/projects/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id })
+            });
+            const d = await res.json();
+            if (d.success) {
+              showToast("Loyiha o'chirildi", "success");
+              loadProjects();
+            } else {
+              showToast(d.error || "O'chirishda xato", "error");
+            }
+          } catch (e) {
+            showToast("Xatolik yuz berdi", "error");
+          }
         }
-      } catch (e) {
-        showToast("Xatolik yuz berdi", "error");
-      }
+      );
     }
 
     // Yangi loyiha
@@ -1871,34 +2309,70 @@ Ushbu faylni xavfsiz saqlang!
       }
     }
 
-    async function createNewFilePrompt() {
-      const name = prompt("Yangi fayl nomini kiriting (masalan: config.py):");
-      if (!name) return;
+    // YANGI FAYL YARATISH (Modal orqali - prompt yo'q!)
+    function createNewFilePrompt() {
+      const input = document.getElementById("newFileNameInput");
+      if (input) input.value = "";
+      openModal("newFileModal");
+    }
+
+    async function submitNewFile() {
+      const input = document.getElementById("newFileNameInput");
+      const name = (input ? input.value : "").trim();
+      if (!name) {
+        showToast("Fayl nomini kiriting!", "error");
+        return;
+      }
+      closeModal("newFileModal");
       activeFilePath = name;
-      document.getElementById("codeTextarea").value = `# ${name}
-`;
+      document.getElementById("codeTextarea").value = `# ${name}\n`;
       await saveActiveFile();
       loadFileList();
     }
 
-    async function deleteFilePrompt(fname) {
-      if (!confirm(`Haqiqatdan ham ${fname} faylini o'chirmoqchimisiz?`)) return;
-      try {
-        const res = await fetch("/api/projects/file/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: activeProjectId, path: fname })
-        });
-        const d = await res.json();
-        if (d.success) {
-          loadFileList();
-          showToast("Fayl o'chirildi");
-        } else {
-          showToast(d.error || "O'chirishda xato", "error");
-        }
-      } catch (e) {
-        showToast("O'chirishda xato", "error");
+    // CONFIRM MODAL (confirm yo'q!)
+    let pendingConfirmAction = null;
+    function showConfirmModal(title, msg, onConfirm) {
+      const titleEl = document.getElementById("confirmModalTitle");
+      const msgEl = document.getElementById("confirmModalMessage");
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.textContent = msg;
+      pendingConfirmAction = onConfirm;
+      openModal("confirmModal");
+    }
+
+    function executeConfirmedAction() {
+      closeModal("confirmModal");
+      if (typeof pendingConfirmAction === "function") {
+        const action = pendingConfirmAction;
+        pendingConfirmAction = null;
+        action();
       }
+    }
+
+    function deleteFilePrompt(fname) {
+      showConfirmModal(
+        "Faylni O'chirish",
+        `Haqiqatdan ham "${fname}" faylini o'chirmoqchimisiz? Ushbu amalni qaytarib bo'lmaydi.`,
+        async () => {
+          try {
+            const res = await fetch("/api/projects/file/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: activeProjectId, path: fname })
+            });
+            const d = await res.json();
+            if (d.success) {
+              loadFileList();
+              showToast("Fayl o'chirildi", "success");
+            } else {
+              showToast(d.error || "O'chirishda xato", "error");
+            }
+          } catch (e) {
+            showToast("O'chirishda xato", "error");
+          }
+        }
+      );
     }
 
     async function handleFileUpload(e) {
@@ -1980,21 +2454,122 @@ Ushbu faylni xavfsiz saqlang!
       }
     }
 
+    // 7 TA TARIFNI YUKLASH VA RENDER QILISH (Cyber-Luxe PaaS)
+    let cachedPlans = [];
+
+    async function loadPlans() {
+      try {
+        const res = await fetch("/api/plans");
+        const data = await res.json();
+        if (data.success && Array.isArray(data.plans)) {
+          cachedPlans = data.plans;
+          renderPlansGrid(cachedPlans);
+        }
+      } catch (e) {
+        console.error("loadPlans xatolik:", e);
+      }
+    }
+
+    function renderPlansGrid(plans) {
+      const container = document.getElementById("plansGridContainer");
+      if (!container) return;
+      if (!plans || plans.length === 0) {
+        container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">Tariflar yuklanmoqda...</div>`;
+        return;
+      }
+
+      container.innerHTML = plans.map(p => {
+        const tierClass = `plan-tier-${p.id}`;
+        const isCurrent = currentUser && (currentUser.plan || "").toLowerCase() === (p.id || "").toLowerCase();
+        const featuresHtml = (p.features || []).map(f => `
+          <li style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px;">
+            <span style="color: var(--accent); font-weight: 700;">✓</span>
+            <span>${f}</span>
+          </li>
+        `).join("");
+
+        return `
+          <div class="plan-card-7 ${tierClass}">
+            <div>
+              <div class="tg-premium-sticker-wrapper">
+                <div class="tg-premium-sticker-halo"></div>
+                <div class="tg-premium-sticker">${p.sticker || "💎"}</div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">${p.name}</h3>
+                ${p.badge ? `<span class="tg-premium-badge">${p.badge}</span>` : ""}
+              </div>
+
+              <div style="font-size: 26px; font-weight: 700; color: var(--text); margin: 12px 0 16px; font-family: var(--font-display);">
+                ${p.price}
+              </div>
+
+              <div class="plan-card-spec-grid">
+                <div class="plan-spec-item">
+                  <span class="plan-spec-label">RAM Xotira</span>
+                  <span class="plan-spec-val">${p.ram_mb >= 1024 ? (p.ram_mb / 1024) + " GB" : p.ram_mb + " MB"}</span>
+                </div>
+                <div class="plan-spec-item">
+                  <span class="plan-spec-label">Maks Loyihalar</span>
+                  <span class="plan-spec-val">${p.max_projects >= 999 ? "Cheksiz" : p.max_projects + " ta"}</span>
+                </div>
+                <div class="plan-spec-item">
+                  <span class="plan-spec-label">CPU Quvvati</span>
+                  <span class="plan-spec-val">${p.cpu_limit || "1.0 Core"}</span>
+                </div>
+                <div class="plan-spec-item">
+                  <span class="plan-spec-label">NVMe Disk</span>
+                  <span class="plan-spec-val">${p.disk_mb >= 1024 ? (p.disk_mb / 1024) + " GB" : p.disk_mb + " MB"}</span>
+                </div>
+              </div>
+
+              <ul style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 24px; list-style: none;">
+                ${featuresHtml}
+              </ul>
+            </div>
+
+            <div>
+              ${isCurrent
+                ? `<button class="btn btn-secondary" style="width: 100%; border-color: var(--accent); color: var(--accent); margin-bottom: 8px;" disabled>✓ Sizning Tarifingiz</button>`
+                : `<button class="btn btn-primary" style="width: 100%; margin-bottom: 8px;" onclick="openPlanOrderModal('${p.id}', '${p.name}', '${p.price}', '${p.sticker}')">💎 Tarifga Ulanish</button>`
+              }
+              <a href="https://t.me/graza_b?text=${encodeURIComponent("Salom Behkruz! Men slowstax.uz saytidan " + p.name + " (" + p.price + ") tarifi haqida bilmoqchiman.")}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="width: 100%; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: #38bdf8;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.458c.538-.196 1.006.128.832.923z"/></svg>
+                Admin: @graza_b
+              </a>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
     // Tarif buyurtma berish (Plan Order Modal)
-    function openPlanOrderModal(plan, price) {
-      selectedOrderPlan = plan;
-      const titleEl = document.getElementById("orderPlanTitle");
+    function openPlanOrderModal(planId, planName, planPrice, planSticker) {
+      const plan = cachedPlans.find(p => p.id === planId) || {
+        id: planId,
+        name: planName || (planId ? planId.toUpperCase() : "PRO"),
+        price: planPrice || "Kompaniya narxida",
+        sticker: planSticker || "💎",
+        badge: "TAVSIYA"
+      };
+
+      selectedOrderPlan = plan.id;
+      const headEl = document.getElementById("orderPlanHeadingText");
+      const iconEl = document.getElementById("orderPlanStickerIcon");
       const badgeEl = document.getElementById("orderPlanBadge");
       const priceEl = document.getElementById("orderPlanPrice");
       const descEl = document.getElementById("orderPlanDesc");
+      const tgBtn = document.getElementById("orderPlanTgDirectBtn");
 
-      if (titleEl) titleEl.textContent = `💎 ${plan} Tarifiga Ulanish`;
-      if (badgeEl) badgeEl.textContent = plan;
-      if (priceEl) priceEl.textContent = price;
-      if (descEl) {
-        descEl.textContent = (plan.includes("VIP"))
-          ? "20 tagacha bot, 1 GB RAM, shaxsiy domen ulash va 24/7 monitoring."
-          : "8 tagacha bot, 350 MB RAM, yuqori CPU ustuvorligi va Telegram yordam.";
+      if (headEl) headEl.textContent = `${plan.name} Tarifiga Ulanish`;
+      if (iconEl) iconEl.textContent = plan.sticker || "💎";
+      if (badgeEl) badgeEl.textContent = plan.badge || (plan.id ? plan.id.toUpperCase() : "PRO");
+      if (priceEl) priceEl.textContent = plan.price;
+      if (descEl) descEl.textContent = `${plan.name} - Anti-Crash nazorati, yuqori tezlikdagi NVMe xotira va 24/7 monitoring.`;
+
+      if (tgBtn) {
+        tgBtn.href = `https://t.me/graza_b?text=${encodeURIComponent("Salom Behkruz! Men slowstax.uz saytidan " + plan.name + " (" + plan.price + ") tarifiga ulanmoqchiman.")}`;
       }
 
       const contactInput = document.getElementById("orderPlanContact");
@@ -2037,6 +2612,108 @@ Ushbu faylni xavfsiz saqlang!
       }
     }
 
+    // BEHKRUZ ADMIN: 7 TA TARIFNI BOSHQARISH
+    let activeAdminPlanId = "pro";
+
+    async function loadAdminPlans() {
+      try {
+        const res = await fetch("/api/plans");
+        const data = await res.json();
+        if (data.success && Array.isArray(data.plans)) {
+          cachedPlans = data.plans;
+          renderAdminPlansSelector();
+          selectAdminPlan(activeAdminPlanId || "pro");
+        }
+      } catch (e) {
+        console.error("loadAdminPlans xatolik:", e);
+      }
+    }
+
+    function renderAdminPlansSelector() {
+      const tabs = document.getElementById("adminPlansTabs");
+      if (!tabs) return;
+
+      tabs.innerHTML = cachedPlans.map(p => `
+        <button type="button" class="admin-plan-pill ${p.id === activeAdminPlanId ? 'active' : ''}" onclick="selectAdminPlan('${p.id}')">
+          <span>${p.sticker || '💎'}</span>
+          <span>${p.name}</span>
+        </button>
+      `).join("");
+    }
+
+    function selectAdminPlan(id) {
+      activeAdminPlanId = id;
+      renderAdminPlansSelector();
+      const plan = cachedPlans.find(p => p.id === id);
+      if (!plan) return;
+
+      const idInput = document.getElementById("planEditId");
+      const idDisp = document.getElementById("planEditIdDisplay");
+      const heading = document.getElementById("planEditHeading");
+      const stickerPrev = document.getElementById("planEditStickerPreview");
+      const badgeDisp = document.getElementById("planEditBadgeDisplay");
+
+      if (idInput) idInput.value = plan.id;
+      if (idDisp) idDisp.textContent = plan.id;
+      if (heading) heading.textContent = plan.name;
+      if (stickerPrev) stickerPrev.textContent = plan.sticker || "💎";
+      if (badgeDisp) badgeDisp.textContent = plan.badge || plan.id.toUpperCase();
+
+      const nameInp = document.getElementById("planEditName");
+      const priceInp = document.getElementById("planEditPrice");
+      const stickerInp = document.getElementById("planEditSticker");
+      const badgeInp = document.getElementById("planEditBadge");
+      const ramInp = document.getElementById("planEditRam");
+      const projInp = document.getElementById("planEditProjects");
+      const cpuInp = document.getElementById("planEditCpu");
+      const diskInp = document.getElementById("planEditDisk");
+      const featInp = document.getElementById("planEditFeatures");
+
+      if (nameInp) nameInp.value = plan.name || "";
+      if (priceInp) priceInp.value = plan.price || "";
+      if (stickerInp) stickerInp.value = plan.sticker || "💎";
+      if (badgeInp) badgeInp.value = plan.badge || "";
+      if (ramInp) ramInp.value = plan.ram_mb || 256;
+      if (projInp) projInp.value = plan.max_projects || 1;
+      if (cpuInp) cpuInp.value = plan.cpu_limit || "1.0 Core";
+      if (diskInp) diskInp.value = plan.disk_mb || 512;
+      if (featInp) featInp.value = Array.isArray(plan.features) ? plan.features.join("\n") : "";
+    }
+
+    async function saveAdminPlan() {
+      const id = document.getElementById("planEditId").value;
+      const name = document.getElementById("planEditName").value.trim();
+      const price = document.getElementById("planEditPrice").value.trim();
+      const sticker = document.getElementById("planEditSticker").value.trim();
+      const badge = document.getElementById("planEditBadge").value.trim();
+      const ram_mb = parseInt(document.getElementById("planEditRam").value) || 256;
+      const max_projects = parseInt(document.getElementById("planEditProjects").value) || 1;
+      const cpu_limit = document.getElementById("planEditCpu").value.trim();
+      const disk_mb = parseInt(document.getElementById("planEditDisk").value) || 512;
+      const featuresRaw = document.getElementById("planEditFeatures").value;
+      const features = featuresRaw.split("\n").map(l => l.trim()).filter(Boolean);
+
+      try {
+        const res = await fetch("/api/admin/plans/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id, name, price, sticker, badge, ram_mb, max_projects, cpu_limit, disk_mb, features
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || `Tarif saqlandi!`, "success");
+          await loadPlans();
+          await loadAdminPlans();
+        } else {
+          showToast(data.error || "Saqlashda xato yuz berdi", "error");
+        }
+      } catch (e) {
+        showToast("Server bilan bog'lanishda xato", "error");
+      }
+    }
+
     // Admin Dashboard
     async function loadAdminDashboard() {
       try {
@@ -2055,7 +2732,7 @@ Ushbu faylni xavfsiz saqlang!
               <td>${u.max_ram_mb} MB</td>
               <td><span style="color:${u.status === "active" ? "var(--accent)" : "var(--danger)"};">${u.status}</span></td>
               <td>
-                <button class="btn btn-secondary btn-sm" onclick="editUserPlanPrompt(${u.id}, '${u.plan}', ${u.max_ram_mb})">⚙️</button>
+                <button class="btn btn-secondary btn-sm" onclick="editUserPlanPrompt(${u.id}, '${u.plan}', ${u.max_ram_mb}, ${u.max_projects})">⚙️</button>
                 ${u.role !== "admin" ? `<button class="btn btn-danger btn-sm" onclick="deleteUserAdmin(${u.id})">🗑</button>` : ""}
               </td>
             </tr>
@@ -2076,7 +2753,6 @@ Ushbu faylni xavfsiz saqlang!
           document.getElementById("adminUptime").textContent = `${upH} soat`;
         }
 
-
         // Settings
         const resCfg = await fetch("/api/admin/settings");
         const dataCfg = await resCfg.json();
@@ -2092,29 +2768,64 @@ Ushbu faylni xavfsiz saqlang!
       }
     }
 
-    async function editUserPlanPrompt(uid, curPlan, curRam) {
-      const newPlan = prompt("Yangi tarifni kiriting (starter / pro / vip):", curPlan);
-      if (!newPlan) return;
-      const newRam = prompt("RAM limitini kiriting (MB):", curRam);
-      if (!newRam) return;
-      await fetch("/api/admin/users/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: uid, plan: newPlan, max_ram_mb: parseInt(newRam) })
-      });
-      showToast("Foydalanuvchi yangilandi!");
-      loadAdminDashboard();
+    // EDIT USER MODAL (ADMIN) (prompt yo'q!)
+    function editUserPlanPrompt(uid, curPlan, curRam, curMaxProj) {
+      document.getElementById("editUserId").value = uid;
+      document.getElementById("editUserName").value = `Mijoz #${uid}`;
+      document.getElementById("editUserPlan").value = curPlan || "starter";
+      document.getElementById("editUserRam").value = curRam || 256;
+      document.getElementById("editUserProjects").value = curMaxProj || 3;
+      openModal("editUserModal");
     }
 
-    async function deleteUserAdmin(uid) {
-      if (!confirm("Rostdan ham ushbu mijozni va uning barcha loyihalarini o'chirmoqchimisiz?")) return;
-      await fetch("/api/admin/users/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: uid })
-      });
-      showToast("Foydalanuvchi o'chirildi");
-      loadAdminDashboard();
+    async function submitEditUser() {
+      const uid = document.getElementById("editUserId").value;
+      const plan = document.getElementById("editUserPlan").value;
+      const max_ram_mb = parseInt(document.getElementById("editUserRam").value) || 256;
+      const max_projects = parseInt(document.getElementById("editUserProjects").value) || 3;
+
+      closeModal("editUserModal");
+      try {
+        const res = await fetch("/api/admin/users/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: uid, plan, max_ram_mb, max_projects })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast("Mijoz ma'lumotlari yangilandi!", "success");
+          loadAdminDashboard();
+        } else {
+          showToast(d.error || "Xato yuz berdi", "error");
+        }
+      } catch (e) {
+        showToast("Server bilan bog'lanishda xato", "error");
+      }
+    }
+
+    function deleteUserAdmin(uid) {
+      showConfirmModal(
+        "Mijozni O'chirish",
+        `Rostdan ham #${uid} raqamli mijozni va uning barcha botlarini serverdan butunlay o'chirmoqchimisiz?`,
+        async () => {
+          try {
+            const res = await fetch("/api/admin/users/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: uid })
+            });
+            const d = await res.json();
+            if (d.success) {
+              showToast("Foydalanuvchi o'chirildi", "success");
+              loadAdminDashboard();
+            } else {
+              showToast(d.error || "O'chirishda xato", "error");
+            }
+          } catch (e) {
+            showToast("Server bilan bog'lanishda xato", "error");
+          }
+        }
+      );
     }
 
     async function saveAdminSettings() {
@@ -2272,6 +2983,7 @@ Ushbu faylni xavfsiz saqlang!
     // Boshlang'ich yuklash
     window.addEventListener("DOMContentLoaded", () => {
       checkAuth();
+      loadPlans();
       initServerCoreGlobe();
       setInterval(loadProjects, 6000);
     });
