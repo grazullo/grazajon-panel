@@ -994,7 +994,7 @@
             <li>✓ Yuqori CPU ustuvorligi</li>
             <li>✓ Maxsus Telegram qo'llab-quvvatlash</li>
           </ul>
-          <button class="btn btn-primary" style="width: 100%;" onclick="showToast('Tarifni oshirish uchun admin bilan bog'laning')">Ulanish</button>
+          <button class="btn btn-primary" style="width: 100%;" onclick="openPlanOrderModal('PRO', '25 000 so\'m / oy')">💎 Ulanish</button>
         </div>
 
         <div class="metric-card" style="padding: 28px; border-color: rgba(245, 158, 11, 0.4);">
@@ -1007,7 +1007,8 @@
             <li>✓ Shaxsiy domen ulash</li>
             <li>✓ 24/7 Monitoring</li>
           </ul>
-          <button class="btn btn-secondary" style="width: 100%;" onclick="showToast('Tarifni oshirish uchun admin bilan bog'laning')">Ulanish</button>
+          <button class="btn btn-secondary" style="width: 100%; border-color: #f59e0b; color: #f59e0b;" onclick="openPlanOrderModal('VIP BIZNES', '60 000 so\'m / oy')">👑 Ulanish</button>
+
         </div>
       </div>
     </div>
@@ -1116,12 +1117,20 @@
   <!-- AUTH MODAL (LOGIN / REGISTER) -->
   <div class="modal-backdrop" id="authModal">
     <div class="modal-card">
-      <div class="auth-tabs">
+      <div style="display: flex; justify-content: flex-end; padding: 12px 16px 0;">
+        <button class="modal-close" onclick="closeModal('authModal')">&times;</button>
+      </div>
+      <div class="auth-tabs" style="padding-top: 0;">
         <button class="auth-tab active" id="tabLoginBtn" onclick="switchAuthTab('login')">Kirish</button>
         <button class="auth-tab" id="tabRegisterBtn" onclick="switchAuthTab('register')">Ro'yxatdan O'tish</button>
       </div>
       <div class="modal-body" style="padding-top: 10px;">
         
+        <!-- BEHKRUZ (ADMIN) QUICK LOGIN BUTTON -->
+        <button class="btn" style="width: 100%; margin-bottom: 12px; background: linear-gradient(135deg, rgba(16,185,129,0.22), rgba(6,182,212,0.22)); border: 1px solid #10b981; color: #10b981; font-weight: 700; padding: 11px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-md); cursor: pointer;" onclick="adminQuickLogin()">
+          👑 Behkruz (Admin) sifatida 1-bosishda kirish
+        </button>
+
         <!-- OAUTH BUTTONS -->
         <button class="oauth-btn" onclick="triggerGoogleAuth()">
           <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.3 8.8 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.3 0-.8.2-1.6.4-2.3L1.6 7.2C.6 9.2 0 11.5 0 14s.6 4.8 1.6 6.8l3.7-2.9c0-.4 0-.8 0-1.2z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.2 0-5.8-2.3-6.7-5.3L1.6 16c1.9 3.8 5.8 7 10.4 7z"/></svg>
@@ -1138,7 +1147,7 @@
         <!-- FORM -->
         <div class="form-group">
           <label class="form-label">Login (Foydalanuvchi nomi)</label>
-          <input type="text" class="form-input" id="authUsername" placeholder="Masalan: jasur_dev" autocomplete="username">
+          <input type="text" class="form-input" id="authUsername" placeholder="Masalan: Behkruz" autocomplete="username">
         </div>
 
         <div class="form-group" id="phoneGroup" style="display:none;">
@@ -1161,6 +1170,43 @@
       </div>
     </div>
   </div>
+
+  <!-- ORDER PLAN MODAL -->
+  <div class="modal-backdrop" id="orderPlanModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="orderPlanTitle">💎 Tarifga Ulanish</h3>
+        <button class="modal-close" onclick="closeModal('orderPlanModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; font-size: 16px; color: var(--accent);" id="orderPlanBadge">PRO</span>
+            <span style="font-weight: 700; font-size: 16px;" id="orderPlanPrice">25 000 so'm / oy</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 6px;" id="orderPlanDesc">
+            Ko'proq RAM, tezkor server yadrosi va VIP qo'llab-quvvatlash.
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Telefon Raqamingiz yoki Telegram username</label>
+          <input type="text" class="form-input" id="orderPlanContact" placeholder="+998901234567 yoki @telegram_nik">
+          <div class="form-helper">Buyurtmangiz bo'yicha admin (Behkruz) shu manzil orqali bog'lanadi</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Qo'shimcha izoh (ixtiyoriy)</label>
+          <input type="text" class="form-input" id="orderPlanNote" placeholder="Masalan: 5 ta Telegram bot ulamoqchiman">
+        </div>
+
+        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="submitPlanOrder()">
+          🚀 Buyurtma Berish
+        </button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- CREDENTIALS SAVED MODAL -->
   <div class="modal-backdrop" id="credSavedModal">
@@ -1266,14 +1312,17 @@
     <div class="modal-card" style="max-width: 800px; width: 95%;">
       <div class="modal-header">
         <h3 id="terminalTitle">📜 Jonli Konsol Loglari</h3>
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn btn-secondary btn-sm" onclick="fetchActiveLogs()">🔄 Yangilash</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadLogsTxt()">📥 Yuklab Olish (.txt)</button>
+          <button class="btn btn-danger btn-sm" onclick="clearProjectLogs()">🧹 Tozalash</button>
           <button class="modal-close" onclick="closeModal('terminalModal')">&times;</button>
         </div>
       </div>
       <div class="terminal-body" id="terminalOutput">Loglar yuklanmoqda...</div>
     </div>
   </div>
+
 
   <!-- TOAST CONTAINER -->
   <div class="toast-container" id="toastContainer"></div>
@@ -1283,32 +1332,38 @@
     let currentUser = null;
     let projectsList = [];
     let activeProjectId = null;
+    let activeProjectName = "";
     let activeFilePath = null;
     let logPollInterval = null;
+    let selectedOrderPlan = "PRO";
 
     // Toast xabarlari
-    function showToast(msg, type = 'info') {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      if (type === 'error') toast.style.borderLeftColor = 'var(--danger)';
-      if (type === 'success') toast.style.borderLeftColor = 'var(--accent)';
+    function showToast(msg, type = "info") {
+      const container = document.getElementById("toastContainer");
+      if (!container) return;
+      const toast = document.createElement("div");
+      toast.className = "toast";
+      if (type === "error") toast.style.borderLeftColor = "var(--danger)";
+      if (type === "success") toast.style.borderLeftColor = "var(--accent)";
       toast.textContent = msg;
       container.appendChild(toast);
       setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(10px)';
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(10px)";
         setTimeout(() => toast.remove(), 300);
       }, 3500);
     }
 
     // Modal nazorati
     function openModal(id) {
-      document.getElementById(id).classList.add('show');
+      const el = document.getElementById(id);
+      if (el) el.classList.add("show");
     }
+
     function closeModal(id) {
-      document.getElementById(id).classList.remove('show');
-      if (id === 'terminalModal' && logPollInterval) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("show");
+      if (id === "terminalModal" && logPollInterval) {
         clearInterval(logPollInterval);
         logPollInterval = null;
       }
@@ -1316,19 +1371,48 @@
 
     // Tab navigatsiyasi
     function navigateTab(tabName) {
-      ['projects', 'plans', 'security', 'admin'].forEach(t => {
-        const tabEl = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
-        const navEl = document.getElementById('nav' + t.charAt(0).toUpperCase() + t.slice(1));
-        if (tabEl) tabEl.style.display = (t === tabName) ? 'block' : 'none';
-        if (navEl) navEl.classList.toggle('active', t === tabName);
+      ["projects", "plans", "security", "admin"].forEach(t => {
+        const tabEl = document.getElementById("tab" + t.charAt(0).toUpperCase() + t.slice(1));
+        const navEl = document.getElementById("nav" + t.charAt(0).toUpperCase() + t.slice(1));
+        if (tabEl) tabEl.style.display = (t === tabName) ? "block" : "none";
+        if (navEl) navEl.classList.toggle("active", t === tabName);
       });
-      if (tabName === 'admin') loadAdminDashboard();
+      if (tabName === "admin") loadAdminDashboard();
+    }
+
+    // Tizim holatini yuklash
+    async function loadSystemStats() {
+      try {
+        const res = await fetch("/api/system/stats");
+        const data = await res.json();
+        if (data.success && data.stats) {
+          const s = data.stats;
+          const b = s.battery;
+          const battEl = document.getElementById("adminBattery");
+          const battStatusEl = document.getElementById("adminBatteryStatus");
+          if (battEl && b) {
+            battEl.textContent = (b.percentage !== null ? b.percentage : 100) + "%";
+          }
+          if (battStatusEl && b) {
+            battStatusEl.textContent = (b.status || "") + (b.temperature_c ? ` (${b.temperature_c}°C)` : "");
+          }
+          const cpuEl = document.getElementById("adminCpu");
+          if (cpuEl) cpuEl.textContent = s.cpu_load_1m || "0.1";
+          const upEl = document.getElementById("adminUptime");
+          if (upEl) {
+            const upH = Math.round((s.device_uptime_sec || 0) / 3600);
+            upEl.textContent = upH + " soat";
+          }
+        }
+      } catch (e) {
+        console.error("loadSystemStats xatolik:", e);
+      }
     }
 
     // Auth holatini tekshirish
     async function checkAuth() {
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await fetch("/api/auth/me");
         const data = await res.json();
         if (data.authenticated) {
           currentUser = data.user;
@@ -1339,8 +1423,8 @@
           currentUser = null;
           renderGuestView();
           if (data.first_run) {
-            openAuthModal('register');
-            showToast('Tizim birinchi marta ishga tushdi. Admin hisobini yarating!', 'info');
+            openAuthModal("register");
+            showToast("Tizim birinchi marta ishga tushdi. Admin hisobini yarating!", "info");
           }
         }
       } catch (e) {
@@ -1349,13 +1433,20 @@
     }
 
     function renderUserProfile() {
-      const area = document.getElementById('userProfileArea');
-      const isAdmin = currentUser.role === 'admin';
-      
-      document.getElementById('navAdmin').style.display = isAdmin ? 'flex' : 'none';
-      document.getElementById('metricPlanName').textContent = currentUser.plan.toUpperCase();
-      document.getElementById('metricProjectsMax').textContent = '/ ' + currentUser.max_projects;
-      document.getElementById('metricRamMax').textContent = '/ ' + currentUser.max_ram_mb + ' MB';
+      const area = document.getElementById("userProfileArea");
+      const isAdmin = currentUser && currentUser.role === "admin";
+
+      const navAdmin = document.getElementById("navAdmin");
+      if (navAdmin) navAdmin.style.display = isAdmin ? "flex" : "none";
+
+      const planEl = document.getElementById("metricPlanName");
+      if (planEl) planEl.textContent = (currentUser.plan || "STARTER").toUpperCase();
+
+      const projMaxEl = document.getElementById("metricProjectsMax");
+      if (projMaxEl) projMaxEl.textContent = "/ " + (currentUser.max_projects || 3);
+
+      const ramMaxEl = document.getElementById("metricRamMax");
+      if (ramMaxEl) ramMaxEl.textContent = "/ " + (currentUser.max_ram_mb || 150) + " MB";
 
       area.innerHTML = `
         <div class="user-chip">
@@ -1368,106 +1459,168 @@
     }
 
     function renderGuestView() {
-      const area = document.getElementById('userProfileArea');
-      document.getElementById('navAdmin').style.display = 'none';
+      const area = document.getElementById("userProfileArea");
+      const navAdmin = document.getElementById("navAdmin");
+      if (navAdmin) navAdmin.style.display = "none";
+
       area.innerHTML = `
         <button class="btn btn-secondary btn-sm" onclick="openAuthModal('login')">Kirish</button>
         <button class="btn btn-primary btn-sm" onclick="openAuthModal('register')">Ro'yxatdan o'tish</button>
+        <button class="btn btn-primary btn-sm" style="background: linear-gradient(135deg, #10b981, #06b6d4); border:none; box-shadow: 0 0 10px rgba(16,185,129,0.4);" onclick="adminQuickLogin()">👑 Behkruz (Admin)</button>
       `;
-      document.getElementById('projectsGrid').innerHTML = `
+
+      const grid = document.getElementById("projectsGrid");
+      grid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 48px; background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border);">
           <div style="font-size: 40px; margin-bottom: 12px;">🔒</div>
           <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 6px;">Tizimga Kiring yoki Ro'yxatdan O'ting</h3>
-          <p style="color: var(--text-muted); font-size: 13px; max-width: 400px; margin: 0 auto 18px;">
-            O'z shaxsiy botlaringizni boshqarish va xavfsiz hostingdan foydalanish uchun tizimga kiring.
+          <p style="color: var(--text-muted); font-size: 13px; max-width: 440px; margin: 0 auto 20px;">
+            O'z shaxsiy botlaringizni boshqarish va xavfsiz hostingdan foydalanish uchun hisobingizga kiring.
           </p>
-          <button class="btn btn-primary" onclick="openAuthModal('register')">Hoziroq Boshlash (Bepul)</button>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="openAuthModal('login')">Kirish</button>
+            <button class="btn btn-secondary" onclick="openAuthModal('register')">Ro'yxatdan O'tish</button>
+            <button class="btn" style="background: linear-gradient(135deg, #10b981, #06b6d4); color: #fff; font-weight:700;" onclick="adminQuickLogin()">👑 Behkruz (Admin) sifatida tezkor kirish</button>
+          </div>
         </div>
       `;
     }
 
-    // Auth Modal
-    let authMode = 'login';
+    // 1-bosishda Behkruz (Admin) tezkor kirish
+    async function adminQuickLogin() {
+      try {
+        const res = await fetch("/api/auth/admin_quick_login", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || "Xush kelibsiz, Behkruz (Admin)!", "success");
+          closeModal("authModal");
+          await checkAuth();
+        } else {
+          showToast(data.error || "Admin hisobi topilmadi", "error");
+        }
+      } catch (e) {
+        showToast("Server bilan bog'lanishda xatolik", "error");
+      }
+    }
+
+    // Google va GitHub orqali kirish
+    async function triggerSocialAuth(provider) {
+      const defaultName = (provider === "google") ? "Google Foydalanuvchi" : "GitHub Foydalanuvchi";
+      const name = prompt(`${provider.toUpperCase()} orqali kirish:
+Ismingiz yoki profilingiz nomini kiriting:`, defaultName);
+      if (name === null) return;
+      try {
+        const res = await fetch("/api/auth/social_demo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: provider,
+            name: name || defaultName,
+            email: `${(name || defaultName).replace(/\s+/g, "").toLowerCase()}@${provider}.com`
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || `${provider} orqali kirdingiz!`, "success");
+          closeModal("authModal");
+          await checkAuth();
+        } else {
+          showToast(data.error || "Xatolik yuz berdi", "error");
+        }
+      } catch (e) {
+        showToast("Server bilan bog'lanishda xatolik", "error");
+      }
+    }
+
+    function triggerGoogleAuth() {
+      triggerSocialAuth("google");
+    }
+
+    function triggerGithubAuth() {
+      triggerSocialAuth("github");
+    }
+
+    // Auth Modal tablari
+    let authMode = "login";
     function openAuthModal(mode) {
       authMode = mode;
       switchAuthTab(mode);
-      openModal('authModal');
+      openModal("authModal");
     }
 
     function switchAuthTab(mode) {
       authMode = mode;
-      document.getElementById('tabLoginBtn').classList.toggle('active', mode === 'login');
-      document.getElementById('tabRegisterBtn').classList.toggle('active', mode === 'register');
-      document.getElementById('phoneGroup').style.display = (mode === 'register') ? 'block' : 'none';
-      document.getElementById('btnGenPass').style.display = (mode === 'register') ? 'inline-flex' : 'none';
-      document.getElementById('authSubmitBtn').textContent = (mode === 'register') ? "Ro'yxatdan O'tish" : "Kirish";
+      document.getElementById("tabLoginBtn").classList.toggle("active", mode === "login");
+      document.getElementById("tabRegisterBtn").classList.toggle("active", mode === "register");
+      document.getElementById("phoneGroup").style.display = (mode === "register") ? "block" : "none";
+      document.getElementById("btnGenPass").style.display = (mode === "register") ? "inline-flex" : "none";
+      document.getElementById("authSubmitBtn").textContent = (mode === "register") ? "Ro'yxatdan O'tish" : "Kirish";
     }
 
     function generateStrongPassword() {
       const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%";
       let pass = "";
       for (let i = 0; i < 12; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
-      document.getElementById('authPassword').value = pass;
-      document.getElementById('authPassword').type = 'text';
-      showToast('Kuchli parol yaratildi!');
+      document.getElementById("authPassword").value = pass;
+      document.getElementById("authPassword").type = "text";
+      showToast("Kuchli parol yaratildi!");
     }
 
     async function submitAuthForm() {
-      const username = document.getElementById('authUsername').value.trim();
-      const password = document.getElementById('authPassword').value;
-      const phone = document.getElementById('authPhone').value.trim();
+      const username = document.getElementById("authUsername").value.trim();
+      const password = document.getElementById("authPassword").value;
+      const phone = document.getElementById("authPhone").value.trim();
 
       if (!username || !password) {
-        showToast('Login va parolni kiriting!', 'error');
+        showToast("Login va parolni kiriting!", "error");
         return;
       }
 
-      const endpoint = (authMode === 'register') ? '/api/auth/register' : '/api/auth/login';
+      const endpoint = (authMode === "register") ? "/api/auth/register" : "/api/auth/login";
       const body = { username, password, phone };
 
       try {
         const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: json.stringify(body)
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
         });
         const data = await res.json();
 
         if (data.success) {
-          closeModal('authModal');
-          if (authMode === 'register' && data.credentials) {
-            // Parollarni saqlash oynasini ochamiz
-            document.getElementById('credSavedUser').textContent = data.credentials.username;
-            document.getElementById('credSavedPass').textContent = data.credentials.password;
-            document.getElementById('credSavedPhone').textContent = data.credentials.phone || 'Kiritilmadi';
-            openModal('credSavedModal');
+          closeModal("authModal");
+          if (authMode === "register" && data.credentials) {
+            document.getElementById("credSavedUser").textContent = data.credentials.username;
+            document.getElementById("credSavedPass").textContent = data.credentials.password;
+            document.getElementById("credSavedPhone").textContent = data.credentials.phone || "Kiritilmadi";
+            openModal("credSavedModal");
           } else {
-            showToast(data.message || 'Muvaffaqiyatli!', 'success');
+            showToast(data.message || "Muvaffaqiyatli!", "success");
             checkAuth();
           }
         } else {
-          showToast(data.error || 'Xatolik yuz berdi', 'error');
+          showToast(data.error || "Xatolik yuz berdi", "error");
         }
       } catch (e) {
-        showToast('Server bilan bog'lanishda xato', 'error');
+        showToast("Server bilan bog'lanishda xato", "error");
       }
     }
 
     // Parollarni telefonga saqlash
     function copyCredentials() {
-      const u = document.getElementById('credSavedUser').textContent;
-      const p = document.getElementById('credSavedPass').textContent;
+      const u = document.getElementById("credSavedUser").textContent;
+      const p = document.getElementById("credSavedPass").textContent;
       const text = `Grazajon Host (https://slowstax.uz)
 Login: ${u}
 Parol: ${p}`;
       navigator.clipboard.writeText(text);
-      showToast('Ma'lumotlar nusxalandi!', 'success');
+      showToast("Ma'lumotlar nusxalandi!", "success");
     }
 
     function downloadCredentialsTxt() {
-      const u = document.getElementById('credSavedUser').textContent;
-      const p = document.getElementById('credSavedPass').textContent;
-      const ph = document.getElementById('credSavedPhone').textContent;
+      const u = document.getElementById("credSavedUser").textContent;
+      const p = document.getElementById("credSavedPass").textContent;
+      const ph = document.getElementById("credSavedPhone").textContent;
       const content = `=========================================
   GRAZAJON HOST — KIRISH MA'LUMOTLARI
 =========================================
@@ -1478,38 +1631,30 @@ Telefon:  ${ph}
 =========================================
 Ushbu faylni xavfsiz saqlang!
 `;
-      const blob = new Blob([content], { type: 'text/plain' });
-      const a = document.createElement('a');
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `grazajon_host_${u}.txt`;
       a.click();
-      showToast('Fayl telefoningizga yuklandi!', 'success');
+      showToast("Fayl telefoningizga yuklandi!", "success");
     }
 
     function closeCredModal() {
-      closeModal('credSavedModal');
+      closeModal("credSavedModal");
       checkAuth();
-    }
-
-    // Google va GitHub OAuth
-    function triggerGoogleAuth() {
-      showToast('Google OAuth sozlanmoqda... Login/Parol orqali ham tezkor kirishingiz mumkin.', 'info');
-    }
-    function triggerGithubAuth() {
-      showToast('GitHub OAuth sozlanmoqda... Login/Parol orqali ham tezkor kirishingiz mumkin.', 'info');
     }
 
     async function logout() {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch("/api/auth/logout", { method: "POST" });
       currentUser = null;
       checkAuth();
-      showToast('Tizimdan chiqdingiz');
+      showToast("Tizimdan chiqdingiz");
     }
 
     // Loyihalarni yuklash
     async function loadProjects() {
       try {
-        const res = await fetch('/api/projects');
+        const res = await fetch("/api/projects");
         const data = await res.json();
         if (data.success) {
           projectsList = data.projects;
@@ -1521,21 +1666,21 @@ Ushbu faylni xavfsiz saqlang!
     }
 
     function renderProjects() {
-      const grid = document.getElementById('projectsGrid');
-      document.getElementById('projCountSub').textContent = `(${projectsList.length} ta)`;
-      document.getElementById('metricProjects').textContent = projectsList.length;
+      const grid = document.getElementById("projectsGrid");
+      document.getElementById("projCountSub").textContent = `(${projectsList.length} ta)`;
+      document.getElementById("metricProjects").textContent = projectsList.length;
 
       // RAM umumiy hisob
       let totalRam = 0;
       projectsList.forEach(p => { if (p.memory_mb) totalRam += p.memory_mb; });
       totalRam = Math.round(totalRam * 10) / 10;
-      document.getElementById('metricRam').textContent = totalRam;
+      document.getElementById("metricRam").textContent = totalRam;
 
       if (currentUser) {
         const ramPct = Math.min(100, Math.round((totalRam / currentUser.max_ram_mb) * 100));
-        document.getElementById('metricRamProgress').style.width = ramPct + '%';
+        document.getElementById("metricRamProgress").style.width = ramPct + "%";
         const projPct = Math.min(100, Math.round((projectsList.length / currentUser.max_projects) * 100));
-        document.getElementById('metricProjectsProgress').style.width = projPct + '%';
+        document.getElementById("metricProjectsProgress").style.width = projPct + "%";
       }
 
       if (projectsList.length === 0) {
@@ -1551,7 +1696,7 @@ Ushbu faylni xavfsiz saqlang!
       }
 
       grid.innerHTML = projectsList.map(p => {
-        const isRun = p.status === 'running';
+        const isRun = p.status === "running";
         return `
           <div class="project-card">
             <div class="proj-top">
@@ -1565,20 +1710,20 @@ Ushbu faylni xavfsiz saqlang!
                   <span>${p.type}</span>
                 </div>
               </div>
-              <div class="status-badge ${isRun ? 'status-running' : 'status-stopped'}">
-                <div class="pulse-dot" style="width:6px; height:6px; background:${isRun ? 'var(--success)' : '#94a3b8'};"></div>
-                ${isRun ? 'Ishlamoqda' : 'To'xtatilgan'}
+              <div class="status-badge ${isRun ? "status-running" : "status-stopped"}">
+                <div class="pulse-dot" style="width:6px; height:6px; background:${isRun ? "var(--success)" : "#94a3b8"};"></div>
+                ${isRun ? "Ishlamoqda" : "To'xtatilgan"}
               </div>
             </div>
 
             <div class="proj-metrics">
               <div class="proj-metric-item">
                 <span>RAM</span>
-                <span>${p.memory_mb ? p.memory_mb + ' MB' : '--'}</span>
+                <span>${p.memory_mb ? p.memory_mb + " MB" : "--"}</span>
               </div>
               <div class="proj-metric-item">
                 <span>UPTIME</span>
-                <span>${p.uptime_sec ? formatUptime(p.uptime_sec) : '--'}</span>
+                <span>${p.uptime_sec ? formatUptime(p.uptime_sec) : "--"}</span>
               </div>
               <div class="proj-metric-item">
                 <span>HIMOYA</span>
@@ -1599,11 +1744,11 @@ Ushbu faylni xavfsiz saqlang!
             </div>
           </div>
         `;
-      }).join('');
+      }).join("");
     }
 
     function formatUptime(sec) {
-      if (!sec) return '--';
+      if (!sec) return "--";
       const m = Math.floor(sec / 60);
       const h = Math.floor(m / 60);
       if (h > 0) return `${h}s ${m % 60}m`;
@@ -1614,72 +1759,75 @@ Ushbu faylni xavfsiz saqlang!
     async function projectAction(id, action) {
       try {
         const res = await fetch(`/api/projects/${action}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: json.stringify({ id })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id })
         });
         const d = await res.json();
         if (d.success) {
-          showToast(`Loyiha ${action === 'start' ? 'ishga tushirildi' : (action === 'stop' ? 'to'xtatildi' : 'qayta yoqildi')}!`);
+          const actTxt = (action === "start") ? "ishga tushirildi" : ((action === "stop") ? "to'xtatildi" : "qayta yoqildi");
+          showToast(`Loyiha ${actTxt}!`);
           loadProjects();
         } else {
-          showToast(d.error, 'error');
+          showToast(d.error || "Xatolik yuz berdi", "error");
         }
       } catch (e) {
-        showToast('Xatolik yuz berdi', 'error');
+        showToast("Xatolik yuz berdi", "error");
       }
     }
 
     async function deleteProject(id) {
-      if (!confirm('Haqiqatdan ham bu loyihani butunlay o'chirmoqchimisiz?')) return;
+      if (!confirm("Haqiqatdan ham bu loyihani butunlay o'chirmoqchimisiz?")) return;
       try {
-        const res = await fetch('/api/projects/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: json.stringify({ id })
+        const res = await fetch("/api/projects/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id })
         });
         const d = await res.json();
         if (d.success) {
-          showToast('Loyiha o'chirildi');
+          showToast("Loyiha o'chirildi");
           loadProjects();
+        } else {
+          showToast(d.error || "O'chirishda xato", "error");
         }
       } catch (e) {
-        showToast('Xatolik yuz berdi', 'error');
+        showToast("Xatolik yuz berdi", "error");
       }
     }
 
     // Yangi loyiha
     function openCreateProjectModal() {
-      document.getElementById('newProjName').value = '';
-      openModal('createProjModal');
+      document.getElementById("newProjName").value = "";
+      openModal("createProjModal");
     }
 
     async function submitCreateProject() {
-      const name = document.getElementById('newProjName').value.trim();
-      const type = document.getElementById('newProjType').value;
-      const entry = document.getElementById('newProjEntry').value.trim() || 'bot.py';
+      const name = document.getElementById("newProjName").value.trim();
+      const type = document.getElementById("newProjType").value;
+      const entry = document.getElementById("newProjEntry").value.trim() || "bot.py";
 
       if (!name) {
-        showToast('Loyiha nomini kiriting', 'error');
+        showToast("Loyiha nomini kiriting", "error");
         return;
       }
 
       try {
-        const res = await fetch('/api/projects/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: json.stringify({ name, type, entry })
+        const res = await fetch("/api/projects/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, type, entry })
         });
         const d = await res.json();
         if (d.success) {
-          closeModal('createProjModal');
-          showToast('Loyiha muvaffaqiyatli yaratildi!', 'success');
+          closeModal("createProjModal");
+          showToast("Loyiha muvaffaqiyatli yaratildi!", "success");
           loadProjects();
         } else {
-          showToast(d.error, 'error');
+          showToast(d.error || "Loyiha yaratishda xato", "error");
         }
       } catch (e) {
-        showToast('Loyiha yaratishda xato', 'error');
+        showToast("Loyiha yaratishda xato", "error");
       }
     }
 
@@ -1687,24 +1835,24 @@ Ushbu faylni xavfsiz saqlang!
     async function openEditorModal(pid) {
       activeProjectId = pid;
       activeFilePath = null;
-      document.getElementById('editorModalTitle').textContent = `📁 Fayllar — ${pid}`;
-      openModal('editorModal');
+      document.getElementById("editorModalTitle").textContent = `📁 Fayllar — ${pid}`;
+      openModal("editorModal");
       loadFileList();
     }
 
-    async function loadFileList(subPath = '') {
+    async function loadFileList(subPath = "") {
       try {
         const res = await fetch(`/api/projects/files?id=${activeProjectId}&path=${encodeURIComponent(subPath)}`);
         const data = await res.json();
         if (data.success) {
-          const listEl = document.getElementById('fileTreeList');
+          const listEl = document.getElementById("fileTreeList");
           listEl.innerHTML = data.items.map(it => `
             <div style="padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-family: var(--font-mono); display: flex; align-items: center; justify-content: space-between;"
                  onclick="${it.is_dir ? `loadFileList('${it.name}')` : `openFileForEdit('${it.name}')`}">
-              <span>${it.is_dir ? '📁' : '📄'} ${it.name}</span>
-              ${!it.is_dir ? `<button class="btn btn-danger btn-sm" style="padding:1px 6px; font-size:10px;" onclick="event.stopPropagation(); deleteFilePrompt('${it.name}')">×</button>` : ''}
+              <span>${it.is_dir ? "📁" : "📄"} ${it.name}</span>
+              ${!it.is_dir ? `<button class="btn btn-danger btn-sm" style="padding:1px 6px; font-size:10px;" onclick="event.stopPropagation(); deleteFilePrompt('${it.name}')">×</button>` : ""}
             </div>
-          `).join('');
+          `).join("");
           if (data.items.length > 0 && !activeFilePath && !data.items[0].is_dir) {
             openFileForEdit(data.items[0].name);
           }
@@ -1720,39 +1868,41 @@ Ushbu faylni xavfsiz saqlang!
         const res = await fetch(`/api/projects/file/get?id=${activeProjectId}&path=${encodeURIComponent(fname)}`);
         const d = await res.json();
         if (d.success) {
-          document.getElementById('codeTextarea').value = d.content;
+          document.getElementById("codeTextarea").value = d.content;
         }
       } catch (e) {
-        showToast('Faylni ochishda xato', 'error');
+        showToast("Faylni ochishda xato", "error");
       }
     }
 
     async function saveActiveFile() {
       if (!activeProjectId || !activeFilePath) {
-        showToast('Fayl tanlanmagan', 'error');
+        showToast("Fayl tanlanmagan", "error");
         return;
       }
-      const content = document.getElementById('codeTextarea').value;
+      const content = document.getElementById("codeTextarea").value;
       try {
-        const res = await fetch('/api/projects/file/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: json.stringify({ id: activeProjectId, path: activeFilePath, content })
+        const res = await fetch("/api/projects/file/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: activeProjectId, path: activeFilePath, content })
         });
         const d = await res.json();
         if (d.success) {
-          showToast('Fayl saqlandi!', 'success');
+          showToast("Fayl saqlandi!", "success");
+        } else {
+          showToast(d.error || "Faylni saqlashda xato", "error");
         }
       } catch (e) {
-        showToast('Faylni saqlashda xato', 'error');
+        showToast("Faylni saqlashda xato", "error");
       }
     }
 
     async function createNewFilePrompt() {
-      const name = prompt('Yangi fayl nomini kiriting (masalan: config.py):');
+      const name = prompt("Yangi fayl nomini kiriting (masalan: config.py):");
       if (!name) return;
       activeFilePath = name;
-      document.getElementById('codeTextarea').value = `# ${name}
+      document.getElementById("codeTextarea").value = `# ${name}
 `;
       await saveActiveFile();
       loadFileList();
@@ -1761,45 +1911,51 @@ Ushbu faylni xavfsiz saqlang!
     async function deleteFilePrompt(fname) {
       if (!confirm(`Haqiqatdan ham ${fname} faylini o'chirmoqchimisiz?`)) return;
       try {
-        await fetch('/api/projects/file/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: json.stringify({ id: activeProjectId, path: fname })
+        const res = await fetch("/api/projects/file/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: activeProjectId, path: fname })
         });
-        loadFileList();
-        showToast('Fayl o'chirildi');
+        const d = await res.json();
+        if (d.success) {
+          loadFileList();
+          showToast("Fayl o'chirildi");
+        } else {
+          showToast(d.error || "O'chirishda xato", "error");
+        }
       } catch (e) {
-        showToast('O'chirishda xato', 'error');
+        showToast("O'chirishda xato", "error");
       }
     }
 
     async function handleFileUpload(e) {
       const file = e.target.files[0];
       if (!file) return;
-      showToast('Fayl yuklanmoqda...');
+      showToast("Fayl yuklanmoqda...");
       try {
         const res = await fetch(`/api/projects/upload?id=${activeProjectId}&filename=${encodeURIComponent(file.name)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          method: "POST",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
           body: file
         });
         const d = await res.json();
         if (d.success) {
-          showToast(d.message || 'Fayl muvaffaqiyatli yuklandi!', 'success');
+          showToast(d.message || "Fayl muvaffaqiyatli yuklandi!", "success");
           loadFileList();
         } else {
-          showToast(d.error, 'error');
+          showToast(d.error || "Yuklashda xato yuz berdi", "error");
         }
       } catch (err) {
-        showToast('Yuklashda xato yuz berdi', 'error');
+        showToast("Yuklashda xato yuz berdi", "error");
       }
     }
 
     // Terminal Loglari
     function openTerminalModal(pid, pname) {
       activeProjectId = pid;
-      document.getElementById('terminalTitle').textContent = `📜 Konsol — ${pname}`;
-      openModal('terminalModal');
+      activeProjectName = pname || pid;
+      document.getElementById("terminalTitle").textContent = `📜 Konsol — ${activeProjectName}`;
+      openModal("terminalModal");
       fetchActiveLogs();
       if (logPollInterval) clearInterval(logPollInterval);
       logPollInterval = setInterval(fetchActiveLogs, 3000);
@@ -1811,8 +1967,8 @@ Ushbu faylni xavfsiz saqlang!
         const res = await fetch(`/api/projects/logs?id=${activeProjectId}`);
         const d = await res.json();
         if (d.success) {
-          const out = document.getElementById('terminalOutput');
-          out.textContent = d.logs || '[Loglar hozircha bo'sh...]';
+          const out = document.getElementById("terminalOutput");
+          out.textContent = d.logs || "[Loglar hozircha bo'sh...]";
           out.scrollTop = out.scrollHeight;
         }
       } catch (e) {
@@ -1820,52 +1976,140 @@ Ushbu faylni xavfsiz saqlang!
       }
     }
 
+    function downloadLogsTxt() {
+      const out = document.getElementById("terminalOutput");
+      const logs = out ? out.textContent : "";
+      const blob = new Blob([logs], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${activeProjectName || activeProjectId || "loyiha"}_logs.txt`;
+      a.click();
+      showToast("Loglar fayli yuklandi!", "success");
+    }
+
+    async function clearProjectLogs() {
+      if (!activeProjectId) return;
+      try {
+        const res = await fetch("/api/projects/logs/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: activeProjectId })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast("Loglar tozalandi!", "success");
+          fetchActiveLogs();
+        } else {
+          showToast(d.error || "Xatolik yuz berdi", "error");
+        }
+      } catch (e) {
+        showToast("Server bilan bog'lanishda xato", "error");
+      }
+    }
+
+    // Tarif buyurtma berish (Plan Order Modal)
+    function openPlanOrderModal(plan, price) {
+      selectedOrderPlan = plan;
+      const titleEl = document.getElementById("orderPlanTitle");
+      const badgeEl = document.getElementById("orderPlanBadge");
+      const priceEl = document.getElementById("orderPlanPrice");
+      const descEl = document.getElementById("orderPlanDesc");
+
+      if (titleEl) titleEl.textContent = `💎 ${plan} Tarifiga Ulanish`;
+      if (badgeEl) badgeEl.textContent = plan;
+      if (priceEl) priceEl.textContent = price;
+      if (descEl) {
+        descEl.textContent = (plan.includes("VIP"))
+          ? "20 tagacha bot, 1 GB RAM, shaxsiy domen ulash va 24/7 monitoring."
+          : "8 tagacha bot, 350 MB RAM, yuqori CPU ustuvorligi va Telegram yordam.";
+      }
+
+      const contactInput = document.getElementById("orderPlanContact");
+      if (contactInput && currentUser && currentUser.phone) {
+        contactInput.value = currentUser.phone;
+      }
+
+      openModal("orderPlanModal");
+    }
+
+    async function submitPlanOrder() {
+      const contact = document.getElementById("orderPlanContact").value.trim();
+      const note = document.getElementById("orderPlanNote").value.trim();
+
+      if (!contact) {
+        showToast("Iltimos, telefon raqamingiz yoki Telegram username kiriting!", "error");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/plans/order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plan: selectedOrderPlan,
+            phone: contact,
+            username: currentUser ? currentUser.username : "Mehmon",
+            note: note
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeModal("orderPlanModal");
+          showToast(data.message || "Buyurtmangiz qabul qilindi!", "success");
+        } else {
+          showToast(data.error || "Xatolik yuz berdi", "error");
+        }
+      } catch (e) {
+        showToast("Server bilan bog'lanishda xatolik", "error");
+      }
+    }
+
     // Admin Dashboard
     async function loadAdminDashboard() {
       try {
         // Users
-        const resUsers = await fetch('/api/admin/users');
+        const resUsers = await fetch("/api/admin/users");
         const dataUsers = await resUsers.json();
         if (dataUsers.success) {
-          document.getElementById('adminUserCount').textContent = dataUsers.users.length;
-          document.getElementById('adminUsersTbody').innerHTML = dataUsers.users.map(u => `
+          document.getElementById("adminUserCount").textContent = dataUsers.users.length;
+          document.getElementById("adminUsersTbody").innerHTML = dataUsers.users.map(u => `
             <tr>
               <td>#${u.id}</td>
               <td style="font-weight:600;">${u.username}</td>
-              <td style="font-family:var(--font-mono);">${u.phone || '--'}</td>
+              <td style="font-family:var(--font-mono);">${u.phone || "--"}</td>
               <td><span class="plan-tag">${u.plan}</span></td>
               <td>${u.project_count} / ${u.max_projects}</td>
               <td>${u.max_ram_mb} MB</td>
-              <td><span style="color:${u.status === 'active' ? 'var(--accent)' : 'var(--danger)'};">${u.status}</span></td>
+              <td><span style="color:${u.status === "active" ? "var(--accent)" : "var(--danger)"};">${u.status}</span></td>
               <td>
                 <button class="btn btn-secondary btn-sm" onclick="editUserPlanPrompt(${u.id}, '${u.plan}', ${u.max_ram_mb})">⚙️</button>
-                ${u.role !== 'admin' ? `<button class="btn btn-danger btn-sm" onclick="deleteUserAdmin(${u.id})">🗑</button>` : ''}
+                ${u.role !== "admin" ? `<button class="btn btn-danger btn-sm" onclick="deleteUserAdmin(${u.id})">🗑</button>` : ""}
               </td>
             </tr>
-          `).join('');
+          `).join("");
         }
 
         // Telemetry
-        const resStats = await fetch('/api/system/stats');
+        const resStats = await fetch("/api/system/stats");
         const dataStats = await resStats.json();
         if (dataStats.success && dataStats.stats.battery) {
           const b = dataStats.stats.battery;
-          document.getElementById('adminBattery').textContent = (b.percentage !== null ? b.percentage : 100) + '%';
-          document.getElementById('adminBatteryStatus').textContent = `${b.status} ${b.temperature_c ? `(${b.temperature_c}°C)` : ''}`;
-          document.getElementById('adminCpu').textContent = dataStats.stats.cpu_load_1m || '0.1';
+          document.getElementById("adminBattery").textContent = (b.percentage !== null ? b.percentage : 100) + "%";
+          document.getElementById("adminBatteryStatus").textContent = `${b.status || ""} ${b.temperature_c ? `(${b.temperature_c}°C)` : ""}`;
+          document.getElementById("adminCpu").textContent = dataStats.stats.cpu_load_1m || "0.1";
           const upH = Math.round((dataStats.stats.device_uptime_sec || 0) / 3600);
-          document.getElementById('adminUptime').textContent = `${upH} soat`;
+          document.getElementById("adminUptime").textContent = `${upH} soat`;
         }
 
         // Settings
-        const resCfg = await fetch('/api/admin/settings');
+        const resCfg = await fetch("/api/admin/settings");
         const dataCfg = await resCfg.json();
         if (dataCfg.success) {
           const s = dataCfg.settings;
-          document.getElementById('cfgTgToken').value = s.telegram_bot_token || '';
-          document.getElementById('cfgTgChatId').value = s.telegram_admin_chat_id || '';
-          document.getElementById('cfgGoogleId').value = s.google_client_id || '';
-          document.getElementById('cfgGithubId').value = s.github_client_id || '';
+          document.getElementById("cfgTgToken").value = s.telegram_bot_token || "";
+          document.getElementById("cfgTgChatId").value = s.telegram_admin_chat_id || "";
+          document.getElementById("cfgGoogleId").value = s.google_client_id || "";
+          document.getElementById("cfgGithubId").value = s.github_client_id || "";
         }
       } catch (e) {
         console.error(e);
@@ -1873,61 +2117,61 @@ Ushbu faylni xavfsiz saqlang!
     }
 
     async function editUserPlanPrompt(uid, curPlan, curRam) {
-      const newPlan = prompt('Yangi tarifni kiriting (starter / pro / vip):', curPlan);
+      const newPlan = prompt("Yangi tarifni kiriting (starter / pro / vip):", curPlan);
       if (!newPlan) return;
-      const newRam = prompt('RAM limitini kiriting (MB):', curRam);
+      const newRam = prompt("RAM limitini kiriting (MB):", curRam);
       if (!newRam) return;
-      await fetch('/api/admin/users/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: json.stringify({ id: uid, plan: newPlan, max_ram_mb: parseInt(newRam) })
+      await fetch("/api/admin/users/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: uid, plan: newPlan, max_ram_mb: parseInt(newRam) })
       });
-      showToast('Foydalanuvchi yangilandi!');
+      showToast("Foydalanuvchi yangilandi!");
       loadAdminDashboard();
     }
 
     async function deleteUserAdmin(uid) {
-      if (!confirm('Rostdan ham ushbu mijozni va uning barcha loyihalarini o'chirmoqchimisiz?')) return;
-      await fetch('/api/admin/users/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: json.stringify({ id: uid })
+      if (!confirm("Rostdan ham ushbu mijozni va uning barcha loyihalarini o'chirmoqchimisiz?")) return;
+      await fetch("/api/admin/users/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: uid })
       });
-      showToast('Foydalanuvchi o'chirildi');
+      showToast("Foydalanuvchi o'chirildi");
       loadAdminDashboard();
     }
 
     async function saveAdminSettings() {
       const payload = {
-        telegram_bot_token: document.getElementById('cfgTgToken').value.trim(),
-        telegram_admin_chat_id: document.getElementById('cfgTgChatId').value.trim(),
-        google_client_id: document.getElementById('cfgGoogleId').value.trim(),
-        github_client_id: document.getElementById('cfgGithubId').value.trim()
+        telegram_bot_token: document.getElementById("cfgTgToken").value.trim(),
+        telegram_admin_chat_id: document.getElementById("cfgTgChatId").value.trim(),
+        google_client_id: document.getElementById("cfgGoogleId").value.trim(),
+        github_client_id: document.getElementById("cfgGithubId").value.trim()
       };
-      await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: json.stringify(payload)
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       });
-      showToast('Sozlamalar saqlandi!', 'success');
+      showToast("Sozlamalar saqlandi!", "success");
     }
 
     async function cleanServerRam() {
-      showToast('RAM tozalanmoqda...');
-      const res = await fetch('/api/system/clean_ram', { method: 'POST' });
+      showToast("RAM tozalanmoqda...");
+      const res = await fetch("/api/system/clean_ram", { method: "POST" });
       const d = await res.json();
-      if (d.success) showToast(d.message, 'success');
+      if (d.success) showToast(d.message, "success");
     }
 
     // 3D SERVER CORE GLOBE CANVAS ANIMATION (60fps)
     function initServerCoreGlobe() {
-      const canvas = document.getElementById('serverGlobeCanvas');
+      const canvas = document.getElementById("serverGlobeCanvas");
       if (!canvas) return;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       let width = canvas.width = canvas.parentElement.offsetWidth;
       let height = canvas.height = canvas.parentElement.offsetHeight;
 
-      window.addEventListener('resize', () => {
+      window.addEventListener("resize", () => {
         width = canvas.width = canvas.parentElement.offsetWidth;
         height = canvas.height = canvas.parentElement.offsetHeight;
       });
@@ -1938,9 +2182,9 @@ Ushbu faylni xavfsiz saqlang!
       let lastX = 0, lastY = 0;
       let velX = 0.003, velY = 0;
 
-      canvas.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
-      window.addEventListener('mouseup', () => { isDragging = false; });
-      window.addEventListener('mousemove', e => {
+      canvas.addEventListener("mousedown", e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+      window.addEventListener("mouseup", () => { isDragging = false; });
+      window.addEventListener("mousemove", e => {
         if (!isDragging) return;
         const dx = e.clientX - lastX;
         const dy = e.clientY - lastY;
@@ -1953,15 +2197,15 @@ Ushbu faylni xavfsiz saqlang!
       });
 
       // Touch events
-      canvas.addEventListener('touchstart', e => {
+      canvas.addEventListener("touchstart", e => {
         if (e.touches.length === 1) {
           isDragging = true;
           lastX = e.touches[0].clientX;
           lastY = e.touches[0].clientY;
         }
       });
-      window.addEventListener('touchend', () => { isDragging = false; });
-      window.addEventListener('touchmove', e => {
+      window.addEventListener("touchend", () => { isDragging = false; });
+      window.addEventListener("touchmove", e => {
         if (!isDragging || e.touches.length !== 1) return;
         const dx = e.touches[0].clientX - lastX;
         const dy = e.touches[0].clientY - lastY;
@@ -2003,10 +2247,8 @@ Ushbu faylni xavfsiz saqlang!
 
         // Project nodes
         const projected = nodes.map(n => {
-          // Rotate Y
           let x1 = n.x * Math.cos(rotY) + n.z * Math.sin(rotY);
           let z1 = -n.x * Math.sin(rotY) + n.z * Math.cos(rotY);
-          // Rotate X
           let y2 = n.y * Math.cos(rotX) - z1 * Math.sin(rotX);
           let z2 = n.y * Math.sin(rotX) + z1 * Math.cos(rotX);
 
@@ -2020,7 +2262,7 @@ Ushbu faylni xavfsiz saqlang!
         });
 
         // Draw connections
-        ctx.strokeStyle = 'rgba(0, 245, 212, 0.12)';
+        ctx.strokeStyle = "rgba(0, 245, 212, 0.12)";
         ctx.lineWidth = 1;
         for (let i = 0; i < projected.length; i++) {
           for (let j = i + 1; j < projected.length; j++) {
@@ -2052,11 +2294,12 @@ Ushbu faylni xavfsiz saqlang!
     }
 
     // Boshlang'ich yuklash
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener("DOMContentLoaded", () => {
       checkAuth();
       initServerCoreGlobe();
       setInterval(loadProjects, 6000);
     });
+
   </script>
 </body>
 </html>
