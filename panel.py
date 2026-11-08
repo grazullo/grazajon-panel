@@ -1710,40 +1710,59 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 
-    init_db()
+    print("\n" + "="*55, flush=True)
+    print("  🚀 GRAZAJON HOST MULTI-TENANT PaaS SERVER v2.0", flush=True)
+    print("="*55, flush=True)
+
+    try:
+        init_db()
+    except Exception as e:
+        print(f"  [OGOHLANTIRISH] Baza yuklashda xato: {e}", flush=True)
 
     # Avtostart qilingan loyihalarni qayta ishga tushirish
-    with DB_LOCK:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT id, user_id FROM projects WHERE auto_restart = 1")
-        for row in cur.fetchall():
-            try:
-                SUPERVISOR.start(row["id"], row["user_id"])
-            except Exception:
-                pass
-        conn.close()
+    try:
+        with DB_LOCK:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id, user_id FROM projects WHERE auto_restart = 1")
+            for row in cur.fetchall():
+                try:
+                    SUPERVISOR.start(row["id"], row["user_id"])
+                except Exception:
+                    pass
+            conn.close()
+    except Exception:
+        pass
 
     class ResilientHTTPServer(ThreadingHTTPServer):
         allow_reuse_address = True
         daemon_threads = True
 
-    server = ResilientHTTPServer((args.host, args.port), PanelHandler)
+    server = None
+    for attempt in range(5):
+        try:
+            server = ResilientHTTPServer((args.host, args.port), PanelHandler)
+            break
+        except OSError as e:
+            if attempt < 4:
+                print(f"  [KUTILMOQDA] {args.port}-port band, bo'shatilishi kutilmoqda ({attempt+1}/5)...", flush=True)
+                time.sleep(1)
+            else:
+                print(f"\n❌ XATO: {args.port}-port band ({e})!", flush=True)
+                print("Eski jarayonlarni to'xtatish uchun quyidagi buyruqni bering:\n  killall -9 python python3", flush=True)
+                sys.exit(1)
 
-    print("\n" + "="*55)
-    print("  🚀 GRAZAJON HOST MULTI-TENANT PaaS SERVER v2.0")
-    print("="*55)
-    print(f"  Port:      {args.port}")
-    print(f"  Ma'lumot:  {DATA_DIR}")
-    print(f"  Baza:      {DB_FILE} (SQLite3)")
-    print(f"  Himoya:    Anti-Crash RAM Watchdog Faol")
-    print(f"  Mahalliy:  http://localhost:{args.port}")
-    print("="*55 + "\n")
+    print(f"  Port:      {args.port}", flush=True)
+    print(f"  Ma'lumot:  {DATA_DIR}", flush=True)
+    print(f"  Baza:      {DB_FILE} (SQLite3)", flush=True)
+    print(f"  Himoya:    Anti-Crash RAM Watchdog Faol", flush=True)
+    print(f"  Mahalliy:  http://localhost:{args.port}", flush=True)
+    print("="*55 + "\n", flush=True)
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[PANEL] Server to'xtatilmoqda...")
+        print("\n[PANEL] Server to'xtatilmoqda...", flush=True)
         for app_id in list(SUPERVISOR.apps.keys()):
             SUPERVISOR.stop(app_id)
         server.server_close()
