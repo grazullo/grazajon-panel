@@ -5,10 +5,12 @@ Asosiy domen: https://slowstax.uz
 """
 import glob
 import os
+import shutil
 import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 def get_local_ip():
@@ -82,7 +84,7 @@ cfg_file.write_text(config_content, encoding="utf-8")
 print(f"  ✓ Konfiguratsiya saqlandi: {cfg_file}")
 
 # 4. Tmux tekshirish va xizmatlarni fonda ishga tushirish
-print("\n[4/4] Xizmatlar tmux fon rejimida ishga tushirilmoqda...")
+print("\n[4/4] Xizmatlar to'liq tozalab, qayta ishga tushirilmoqda...")
 
 # Tmux bor-yo'qligini tekshirish
 tmux_check = subprocess.run(["which", "tmux"], capture_output=True, text=True).stdout.strip()
@@ -90,23 +92,46 @@ if not tmux_check:
     print("  tmux topilmadi, o'rnatilmoqda...")
     subprocess.run(["pkg", "install", "tmux", "-y"])
 
-# Eski sessiyalarni to'xtatish
+# Eski qotib qolgan jarayonlarni to'liq to'xtatish
 subprocess.run(["tmux", "kill-session", "-t", "panel"], capture_output=True)
 subprocess.run(["tmux", "kill-session", "-t", "tunnel"], capture_output=True)
-time.sleep(1)
+subprocess.run(["pkill", "-f", "panel.py"], capture_output=True)
+subprocess.run(["pkill", "-f", "cloudflared"], capture_output=True)
+time.sleep(1.5)
 
-home_dir = str(Path.home())
-panel_py = os.path.join(home_dir, "grazajon-panel", "panel.py")
+panel_dir = os.path.dirname(os.path.abspath(__file__))
+panel_py = os.path.join(panel_dir, "panel.py")
 
-# Grazajon panelni ishga tushirish (agar to'xtasa, avtomatik qayta yonadi)
-cmd_panel = f"while true; do python3 {panel_py}; sleep 3; done"
-subprocess.run(["tmux", "new", "-d", "-s", "panel", cmd_panel])
-print("  ✓ Grazajon Panel (port 5000) fon rejimida ishga tushdi.")
+# Grazajon panelni ishga tushirish
+py_bin = sys.executable or "python3"
+cmd_panel = f"cd {panel_dir} && while true; do {py_bin} panel.py; sleep 3; done"
+subprocess.run(["tmux", "new", "-d", "-s", "panel", "bash", "-c", cmd_panel])
 
-# Cloudflare tunnelni ishga tushirish (agar to'xtasa, avtomatik qayta ulanadi)
+# Cloudflare tunnelni ishga tushirish
 cmd_tunnel = f"while true; do cloudflared tunnel --config {cfg_file} run; sleep 5; done"
-subprocess.run(["tmux", "new", "-d", "-s", "tunnel", cmd_tunnel])
-print("  ✓ Cloudflare Tunnel xalqaro tarmog'i ishga tushdi.")
+subprocess.run(["tmux", "new", "-d", "-s", "tunnel", "bash", "-c", cmd_tunnel])
+
+# 5. Xizmat salomatligini tekshirish (Health Check)
+print("\n🔍 Server tekshirilmoqda...")
+time.sleep(2)
+
+panel_ok = False
+for attempt in range(5):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:5000/api/auth/me", timeout=2) as resp:
+            if resp.status == 200:
+                panel_ok = True
+                break
+    except Exception:
+        time.sleep(1)
+
+if panel_ok:
+    print("  ✓ Grazajon Panel (port 5000) 100% muvaffaqiyatli ishga tushdi!")
+else:
+    print("  ⚠️ Ogohlantirish: 5000-port tezda javob bermadi. Konsol diagnostikasi:")
+    diag = subprocess.run(["tmux", "capture-pane", "-pt", "panel"], capture_output=True, text=True)
+    if diag.stdout.strip():
+        print(diag.stdout.strip()[-500:])
 
 local_ip = get_local_ip()
 
