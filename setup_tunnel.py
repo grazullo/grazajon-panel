@@ -71,12 +71,13 @@ credentials-file: {cred_file}
 
 ingress:
   - hostname: slowstax.uz
-    service: http://localhost:5000
+    service: http://127.0.0.1:5000
   - hostname: www.slowstax.uz
-    service: http://localhost:5000
+    service: http://127.0.0.1:5000
   - hostname: panel.slowstax.uz
-    service: http://localhost:5000
+    service: http://127.0.0.1:5000
   - service: http_status:404
+
 """
 
 cfg_file = cf_dir / "config.yml"
