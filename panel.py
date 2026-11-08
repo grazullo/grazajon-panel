@@ -76,8 +76,17 @@ def get_db_connection() -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(DB_FILE, timeout=15.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
+    try:
+        conn.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        pass
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except Exception:
+        try:
+            conn.execute("PRAGMA journal_mode = DELETE")
+        except Exception:
+            pass
     return conn
 
 
@@ -857,6 +866,9 @@ class PanelHandler(BaseHTTPRequestHandler):
             raise ValueError("So'rov hajmi juda katta")
         raw = self.rfile.read(clen)
         return json.loads(raw.decode("utf-8"))
+
+    def do_HEAD(self):
+        self.do_GET()
 
     # --------------------------------------------------------------------------
     # GET SO'ROVLARI
@@ -1711,8 +1723,11 @@ def main():
                 pass
         conn.close()
 
-    server = ThreadingHTTPServer((args.host, args.port), PanelHandler)
-    server.daemon_threads = True
+    class ResilientHTTPServer(ThreadingHTTPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    server = ResilientHTTPServer((args.host, args.port), PanelHandler)
 
     print("\n" + "="*55)
     print("  🚀 GRAZAJON HOST MULTI-TENANT PaaS SERVER v2.0")
