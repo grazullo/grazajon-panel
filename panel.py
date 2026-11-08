@@ -56,7 +56,7 @@ SESSION_TTL = 7 * 24 * 3600
 
 STATE_LOCK = threading.RLock()
 LOG_LOCK = threading.Lock()
-DB_LOCK = threading.Lock()
+DB_LOCK = threading.RLock()
 PANEL_PORT = 5000
 
 # Rate Limiter: IP -> [timestamps]
@@ -1720,19 +1720,22 @@ def main():
         print(f"  [OGOHLANTIRISH] Baza yuklashda xato: {e}", flush=True)
 
     # Avtostart qilingan loyihalarni qayta ishga tushirish
+    projects_to_start = []
     try:
         with DB_LOCK:
             conn = get_db_connection()
             cur = conn.cursor()
             cur.execute("SELECT id, user_id FROM projects WHERE auto_restart = 1")
-            for row in cur.fetchall():
-                try:
-                    SUPERVISOR.start(row["id"], row["user_id"])
-                except Exception:
-                    pass
+            projects_to_start = [(row["id"], row["user_id"]) for row in cur.fetchall()]
             conn.close()
     except Exception:
         pass
+
+    for pid, uid in projects_to_start:
+        try:
+            SUPERVISOR.start(pid, uid)
+        except Exception:
+            pass
 
     class ResilientHTTPServer(ThreadingHTTPServer):
         allow_reuse_address = True
