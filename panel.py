@@ -275,16 +275,18 @@ def db_create_user(username: str, password: str, phone: str = "", email: str = "
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Birinchi foydalanuvchi avtomatik admin bo'ladi
-        cur.execute("SELECT COUNT(*) as cnt FROM users")
-        if cur.fetchone()["cnt"] == 0:
+        # Faqat Behkruz admin bo'ladi, barcha yangi ro'yxatdan o'tuvchilar oddiy mijoz (client) bo'ladi
+        if username.strip().lower() == "behkruz":
             role = "admin"
             plan = "vip"
             max_proj = 50
             max_ram = 1024
         else:
-            max_proj = 3 if plan == "starter" else (8 if plan == "pro" else 20)
-            max_ram = 150 if plan == "starter" else (350 if plan == "pro" else 800)
+            role = "client"
+            plan = "starter"
+            max_proj = 3
+            max_ram = 150
+
 
         pw_hash, salt = hash_password(password)
         now = int(time.time())
@@ -444,52 +446,9 @@ def get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def get_battery_stats() -> dict:
-    for p in ["/sys/class/power_supply/battery", "/sys/class/power_supply/bms", "/sys/class/power_supply/BAT0"]:
-        cap_file = os.path.join(p, "capacity")
-        if os.path.exists(cap_file):
-            try:
-                cap = int(open(cap_file).read().strip())
-                status = "Discharging"
-                st_file = os.path.join(p, "status")
-                if os.path.exists(st_file):
-                    status = open(st_file).read().strip()
-                temp = None
-                t_file = os.path.join(p, "temp")
-                if os.path.exists(t_file):
-                    raw_t = int(open(t_file).read().strip())
-                    temp = round(raw_t / 10 if raw_t < 1000 else raw_t / 1000, 1)
-                return {
-                    "percentage": cap,
-                    "status": status,
-                    "temperature_c": temp,
-                    "plugged": status.lower() in ("charging", "full"),
-                }
-            except Exception:
-                pass
-
-    try:
-        res = subprocess.run(["termux-battery-status"], capture_output=True, text=True, timeout=0.8)
-        if res.returncode == 0:
-            d = json.loads(res.stdout)
-            return {
-                "percentage": int(d.get("percentage", 100)),
-                "status": str(d.get("status", "Unknown")),
-                "temperature_c": d.get("temperature"),
-                "plugged": d.get("plugged", "UNPLUGGED") != "UNPLUGGED",
-            }
-    except Exception:
-        pass
-
-    return {
-        "percentage": None,
-        "status": "Tarmoqda (Noma'lum)",
-        "temperature_c": None,
-        "plugged": True,
-    }
-
 
 def get_process_memory_mb(pid: int | None) -> float | None:
+
     if not pid:
         return None
     try:
@@ -552,10 +511,11 @@ def get_system_stats():
         "mem_percent": mem_percent,
         "cpu_load_1m": load_1m,
         "device_uptime_sec": device_uptime_sec,
-        "battery": get_battery_stats(),
+        "server_status": "Operational",
         "local_ip": get_local_ip(),
         "anti_crash_active": True
     }
+
 
 
 def append_log(log_path: Path, text: str):
@@ -970,22 +930,18 @@ class PanelHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # 3. Tizim telemetriyasi
+        # 3. Tizim telemetriyasi (Faqat Administrator uchun!)
         if path == "/api/system/stats":
             user = self._require_user()
             if not user:
                 return
-            stats = get_system_stats()
-            # Oddiy foydalanuvchiga faqat xavfsiz qismini beramiz, admin to'liq ko'radi
             if user["role"] != "admin":
-                stats = {
-                    "anti_crash_active": True,
-                    "server_status": "Operational",
-                    "user_plan": user["plan"],
-                    "user_max_ram": user["max_ram_mb"]
-                }
+                self._error(403, "Ruxsat yo'q (Faqat admin uchun)")
+                return
+            stats = get_system_stats()
             self._json(200, {"success": True, "stats": stats})
             return
+
 
         # 4. Loyihalar ro'yxati (Faqat o'zining loyihalari!)
         if path == "/api/projects":
@@ -1291,41 +1247,8 @@ class PanelHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        # 1.5. Behkruz (Admin) uchun 1-bosishda tezkor kirish
-        if path == "/api/auth/admin_quick_login":
-            user = db_get_user_by_username("Behkruz") or db_get_user_by_username("admin")
-            if not user:
-                self._error(404, "Admin hisobi topilmadi")
-                return
-
-            token = db_create_session(user["id"])
-            c = cookies.SimpleCookie()
-            c["grazajon_sid"] = token
-            c["grazajon_sid"]["path"] = "/"
-            c["grazajon_sid"]["httponly"] = True
-            c["grazajon_sid"]["max-age"] = SESSION_TTL
-            c["grazajon_sid"]["samesite"] = "Lax"
-
-            resp_data = {
-                "success": True,
-                "message": f"Xush kelibsiz, {user['username']}!",
-                "user": {
-                    "id": user["id"],
-                    "username": user["username"],
-                    "role": user["role"],
-                    "plan": user["plan"]
-                }
-            }
-            body = json.dumps(resp_data, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Set-Cookie", c["grazajon_sid"].OutputString())
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
         # 2. Kirish (Login)
+
         if path == "/api/auth/login":
             if not check_rate_limit(client_ip, max_requests=25, window_sec=60):
                 self._error(429, "Juda ko'p urinishlar. Iltimos, 1 daqiqa kuting!")

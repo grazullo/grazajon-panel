@@ -1021,10 +1021,10 @@
       <div class="core-card" style="min-height: auto; margin-bottom: 20px;">
         <h3 style="font-size: 18px; margin-bottom: 10px; color: var(--accent);">Qanday qilib server hech qachon buzilmaydi va qotmaydi?</h3>
         <p style="color: var(--text-muted); font-size: 14px; line-height: 1.7; margin-bottom: 14px;">
-          Grazajon Host serveri telefon va VPS xotirasini himoya qiluvchi kuchli <b>Anti-Crash Watchdog</b> bilan jihozlangan:
+          Grazajon Cloud PaaS serveri klaster va VPS xotirasini himoya qiluvchi kuchli <b>Anti-Crash Watchdog</b> bilan jihozlangan:
         </p>
         <ul style="font-size: 13px; color: var(--text); line-height: 2; padding-left: 20px;">
-          <li><b>RAM Limitini Majburiy Nazorat Qilish:</b> Agar biror foydalanuvchining kodi xotirani haddan tashqari ko'p yeb qo'ysa (masalan 150MB dan oshsa), tizim butun telefonni muzlab qolishidan asrash uchun o'sha bitta botni avtomatik to'xtatadi. Boshqa foydalanuvchilar ishlashda davom etadi.</li>
+          <li><b>RAM Limitini Majburiy Nazorat Qilish:</b> Agar biror foydalanuvchining kodi xotirani haddan tashqari ko'p yeb qo'ysa (masalan 150MB dan oshsa), butun tizim qotib qolishidan asrash uchun tizim o'sha bitta botni avtomatik to'xtatadi. Boshqa foydalanuvchilar ishlashda davom etadi.</li>
           <li><b>Qat'iy Ma'lumotlar Izolyatsiyasi:</b> Har bir mijoz loyihasi faqat o'z shaxsiy papkasida saqlanadi. Hech kim boshqalarning kodini, fayllarini yoki ma'lumotlar bazasini ko'ra olmaydi.</li>
           <li><b>Crash Loop Himoyasi:</b> Agar biror bot to'xtovsiz xato berib qayta yonaversa, CPU qizib ketmasligi uchun avtomatik ravishda orom olish rejimi yoqiladi.</li>
           <li><b>DDoS va Brute-Force Himoyasi:</b> Bir soniyada yuzlab urinishlar qilgan shubhali IP manzillar avtomatik cheklanadi.</li>
@@ -1042,10 +1042,11 @@
       <!-- Telemetriya HUD -->
       <div class="hud-metrics" style="margin-bottom: 24px;">
         <div class="metric-card">
-          <div class="metric-header"><span>Telefon Batareyasi</span><span>🔋</span></div>
-          <div class="metric-value"><span id="adminBattery">--%</span></div>
-          <div class="metric-sub" id="adminBatteryStatus">Zaryad holati tekshirilmoqda...</div>
+          <div class="metric-header"><span>Server Holati</span><span>🛡️</span></div>
+          <div class="metric-value"><span id="adminServerStatus">100% Onlayn</span></div>
+          <div class="metric-sub" id="adminServerSub">Anti-Crash Watchdog Faol</div>
         </div>
+
         <div class="metric-card">
           <div class="metric-header"><span>CPU Yuklanishi (1m)</span><span>⚡</span></div>
           <div class="metric-value"><span id="adminCpu">0.0</span></div>
@@ -1092,9 +1093,10 @@
         <h3 style="font-size: 16px; margin-bottom: 14px;">Platforma Sozlamalari (Telegram & OAuth)</h3>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
           <div class="form-group">
-            <label class="form-label">Telegram Bot Token (Parollarni telefonga yuborish uchun)</label>
+            <label class="form-label">Telegram Bot Token (Bildirishnomalar yuborish uchun)</label>
             <input type="text" class="form-input" id="cfgTgToken" placeholder="123456:ABC-DEF...">
           </div>
+
           <div class="form-group">
             <label class="form-label">Admin Telegram Chat ID</label>
             <input type="text" class="form-input" id="cfgTgChatId" placeholder="123456789">
@@ -1126,11 +1128,6 @@
       </div>
       <div class="modal-body" style="padding-top: 10px;">
         
-        <!-- BEHKRUZ (ADMIN) QUICK LOGIN BUTTON -->
-        <button class="btn" style="width: 100%; margin-bottom: 12px; background: linear-gradient(135deg, rgba(16,185,129,0.22), rgba(6,182,212,0.22)); border: 1px solid #10b981; color: #10b981; font-weight: 700; padding: 11px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-md); cursor: pointer;" onclick="adminQuickLogin()">
-          👑 Behkruz (Admin) sifatida 1-bosishda kirish
-        </button>
-
         <!-- OAUTH BUTTONS -->
         <button class="oauth-btn" onclick="triggerGoogleAuth()">
           <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.3 8.8 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.3 14.7c-.2-.7-.4-1.5-.4-2.3 0-.8.2-1.6.4-2.3L1.6 7.2C.6 9.2 0 11.5 0 14s.6 4.8 1.6 6.8l3.7-2.9c0-.4 0-.8 0-1.2z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.2 0-5.8-2.3-6.7-5.3L1.6 16c1.9 3.8 5.8 7 10.4 7z"/></svg>
@@ -1147,8 +1144,9 @@
         <!-- FORM -->
         <div class="form-group">
           <label class="form-label">Login (Foydalanuvchi nomi)</label>
-          <input type="text" class="form-input" id="authUsername" placeholder="Masalan: Behkruz" autocomplete="username">
+          <input type="text" class="form-input" id="authUsername" placeholder="Login (foydalanuvchi nomi)" autocomplete="username">
         </div>
+
 
         <div class="form-group" id="phoneGroup" style="display:none;">
           <label class="form-label">Telefon Raqamingiz (Parolni saqlab olish uchun)</label>
@@ -1192,7 +1190,7 @@
         <div class="form-group">
           <label class="form-label">Telefon Raqamingiz yoki Telegram username</label>
           <input type="text" class="form-input" id="orderPlanContact" placeholder="+998901234567 yoki @telegram_nik">
-          <div class="form-helper">Buyurtmangiz bo'yicha admin (Behkruz) shu manzil orqali bog'lanadi</div>
+          <div class="form-helper">Buyurtmangiz bo'yicha tez orada siz bilan bog'laniladi</div>
         </div>
 
         <div class="form-group">
@@ -1216,7 +1214,7 @@
       </div>
       <div class="modal-body">
         <p style="color: var(--text-muted); font-size: 13px;">
-          Siz muvaffaqiyatli ro'yxatdan o'tdingiz. Tizimga qayta kirish uchun quyidagi ma'lumotlarni telefoningizga saqlab oling:
+          Siz muvaffaqiyatli ro'yxatdan o'tdingiz. Tizimga qayta kirish uchun quyidagi ma'lumotlarni saqlab oling:
         </p>
         <div class="cred-box">
           <div class="cred-row">
@@ -1238,9 +1236,10 @@
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <button class="btn btn-secondary" onclick="copyCredentials()">📋 Nusxalab Olish</button>
-          <button class="btn btn-primary" onclick="downloadCredentialsTxt()">💾 Telefonga (.txt)</button>
+          <button class="btn btn-primary" onclick="downloadCredentialsTxt()">💾 Yuklab Olish (.txt)</button>
         </div>
       </div>
+
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="closeCredModal()">Panelga O'tish →</button>
       </div>
@@ -1380,22 +1379,16 @@
       if (tabName === "admin") loadAdminDashboard();
     }
 
-    // Tizim holatini yuklash
+    // Tizim holatini yuklash (Faqat Admin uchun)
     async function loadSystemStats() {
+      if (!currentUser || currentUser.role !== "admin") return;
       try {
         const res = await fetch("/api/system/stats");
         const data = await res.json();
         if (data.success && data.stats) {
           const s = data.stats;
-          const b = s.battery;
-          const battEl = document.getElementById("adminBattery");
-          const battStatusEl = document.getElementById("adminBatteryStatus");
-          if (battEl && b) {
-            battEl.textContent = (b.percentage !== null ? b.percentage : 100) + "%";
-          }
-          if (battStatusEl && b) {
-            battStatusEl.textContent = (b.status || "") + (b.temperature_c ? ` (${b.temperature_c}°C)` : "");
-          }
+          const statusEl = document.getElementById("adminServerStatus");
+          if (statusEl) statusEl.textContent = "100% Onlayn";
           const cpuEl = document.getElementById("adminCpu");
           if (cpuEl) cpuEl.textContent = s.cpu_load_1m || "0.1";
           const upEl = document.getElementById("adminUptime");
@@ -1418,14 +1411,12 @@
           currentUser = data.user;
           renderUserProfile();
           loadProjects();
-          loadSystemStats();
+          if (currentUser.role === "admin") {
+            loadSystemStats();
+          }
         } else {
           currentUser = null;
           renderGuestView();
-          if (data.first_run) {
-            openAuthModal("register");
-            showToast("Tizim birinchi marta ishga tushdi. Admin hisobini yarating!", "info");
-          }
         }
       } catch (e) {
         console.error("Auth check error:", e);
@@ -1466,7 +1457,6 @@
       area.innerHTML = `
         <button class="btn btn-secondary btn-sm" onclick="openAuthModal('login')">Kirish</button>
         <button class="btn btn-primary btn-sm" onclick="openAuthModal('register')">Ro'yxatdan o'tish</button>
-        <button class="btn btn-primary btn-sm" style="background: linear-gradient(135deg, #10b981, #06b6d4); border:none; box-shadow: 0 0 10px rgba(16,185,129,0.4);" onclick="adminQuickLogin()">👑 Behkruz (Admin)</button>
       `;
 
       const grid = document.getElementById("projectsGrid");
@@ -1480,28 +1470,11 @@
           <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
             <button class="btn btn-primary" onclick="openAuthModal('login')">Kirish</button>
             <button class="btn btn-secondary" onclick="openAuthModal('register')">Ro'yxatdan O'tish</button>
-            <button class="btn" style="background: linear-gradient(135deg, #10b981, #06b6d4); color: #fff; font-weight:700;" onclick="adminQuickLogin()">👑 Behkruz (Admin) sifatida tezkor kirish</button>
           </div>
         </div>
       `;
     }
 
-    // 1-bosishda Behkruz (Admin) tezkor kirish
-    async function adminQuickLogin() {
-      try {
-        const res = await fetch("/api/auth/admin_quick_login", { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-          showToast(data.message || "Xush kelibsiz, Behkruz (Admin)!", "success");
-          closeModal("authModal");
-          await checkAuth();
-        } else {
-          showToast(data.error || "Admin hisobi topilmadi", "error");
-        }
-      } catch (e) {
-        showToast("Server bilan bog'lanishda xatolik", "error");
-      }
-    }
 
     // Google va GitHub orqali kirish
     async function triggerSocialAuth(provider) {
@@ -2092,14 +2065,17 @@ Ushbu faylni xavfsiz saqlang!
         // Telemetry
         const resStats = await fetch("/api/system/stats");
         const dataStats = await resStats.json();
-        if (dataStats.success && dataStats.stats.battery) {
-          const b = dataStats.stats.battery;
-          document.getElementById("adminBattery").textContent = (b.percentage !== null ? b.percentage : 100) + "%";
-          document.getElementById("adminBatteryStatus").textContent = `${b.status || ""} ${b.temperature_c ? `(${b.temperature_c}°C)` : ""}`;
-          document.getElementById("adminCpu").textContent = dataStats.stats.cpu_load_1m || "0.1";
-          const upH = Math.round((dataStats.stats.device_uptime_sec || 0) / 3600);
+        if (dataStats.success && dataStats.stats) {
+          const s = dataStats.stats;
+          const statusEl = document.getElementById("adminServerStatus");
+          if (statusEl) statusEl.textContent = "100% Onlayn";
+          const subEl = document.getElementById("adminServerSub");
+          if (subEl) subEl.textContent = "Anti-Crash Watchdog Faol";
+          document.getElementById("adminCpu").textContent = s.cpu_load_1m || "0.1";
+          const upH = Math.round((s.device_uptime_sec || 0) / 3600);
           document.getElementById("adminUptime").textContent = `${upH} soat`;
         }
+
 
         // Settings
         const resCfg = await fetch("/api/admin/settings");
