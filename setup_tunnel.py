@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Grazajon Host — Cloudflare Tunnel va Domen avtomatik sozlash skripti.
-Muallif: Grazajon
+Asosiy domen: https://slowstax.uz
 """
 import glob
 import os
@@ -23,6 +23,7 @@ def get_local_ip():
 
 print("\n" + "="*50)
 print("  🚀 GRAZAJON HOST — CLOUDFLARE TUNNEL SOZLAGICH")
+print("  🌐 Domen: https://slowstax.uz")
 print("="*50)
 
 # 1. ~/.cloudflared papkasi va sertifikatni tekshirish
@@ -49,36 +50,30 @@ print(f"\n[1/4] ✓ Topilgan tunnel ID: {tunnel_id}")
 
 # 2. DNS yozuvlarini bog'lash (--overwrite-dns bilan)
 print("\n[2/4] DNS yozuvlari Cloudflare bilan bog'lanmoqda...")
-print("  -> panel.slowstax.uz sozlanmoqda...")
-res1 = subprocess.run(
-    ["cloudflared", "tunnel", "route", "dns", "--overwrite-dns", "telefon-tunnel", "panel.slowstax.uz"],
-    capture_output=True, text=True
-)
-if "successfully" in res1.stdout.lower() or res1.returncode == 0:
-    print("     ✓ panel.slowstax.uz muvaffaqiyatli bog'landi!")
-else:
-    print(f"     ℹ️  {res1.stdout.strip() or res1.stderr.strip()}")
+hosts = ["slowstax.uz", "www.slowstax.uz", "panel.slowstax.uz"]
+for host in hosts:
+    print(f"  -> {host} sozlanmoqda...")
+    res = subprocess.run(
+        ["cloudflared", "tunnel", "route", "dns", "--overwrite-dns", "telefon-tunnel", host],
+        capture_output=True, text=True
+    )
+    if "successfully" in res.stdout.lower() or res.returncode == 0:
+        print(f"     ✓ {host} muvaffaqiyatli bog'landi!")
+    else:
+        print(f"     ℹ️  {res.stdout.strip() or res.stderr.strip()}")
 
-print("  -> slowstax.uz sozlanmoqda...")
-res2 = subprocess.run(
-    ["cloudflared", "tunnel", "route", "dns", "--overwrite-dns", "telefon-tunnel", "slowstax.uz"],
-    capture_output=True, text=True
-)
-if "successfully" in res2.stdout.lower() or res2.returncode == 0:
-    print("     ✓ slowstax.uz muvaffaqiyatli bog'landi!")
-else:
-    print(f"     ℹ️  {res2.stdout.strip() or res2.stderr.strip()}")
-
-# 3. config.yml faylini yaratish
+# 3. config.yml faylini yaratish (barcha so'rovlar to'g'ridan-to'g'ri 5000-portdagi panelga yo'naltiriladi)
 print("\n[3/4] Tunnel konfiguratsiya fayli (config.yml) yaratilmoqda...")
 config_content = f"""tunnel: {tunnel_id}
 credentials-file: {cred_file}
 
 ingress:
+  - hostname: slowstax.uz
+    service: http://localhost:5000
+  - hostname: www.slowstax.uz
+    service: http://localhost:5000
   - hostname: panel.slowstax.uz
     service: http://localhost:5000
-  - hostname: slowstax.uz
-    service: http://localhost:8080
   - service: http_status:404
 """
 
@@ -119,11 +114,12 @@ print("\n" + "="*50)
 print("  🎉 HAMMASI TAYYOR! GRAZAJON HOST ISHLAMOQDA!")
 print("="*50)
 print("\n🌐 Dunyoning istalgan chekkasidan kirish (Wi-Fi / Mobil 4G/5G):")
-print("   👉 Boshqaruv paneli:  https://panel.slowstax.uz")
-print("   👉 Saytingiz:         https://slowstax.uz")
+print("   👉 Asosiy manzil:      https://slowstax.uz")
+print("   👉 Qo'shimcha manzil:  https://www.slowstax.uz")
+print("   👉 Panel manzili:      https://panel.slowstax.uz")
 print(f"\n🏠 Uy tarmog'idan kirish:")
-print(f"   👉 Mahalliy IP:       http://{local_ip}:5000")
-print("   👉 Localhost:         http://localhost:5000")
+print(f"   👉 Mahalliy IP:        http://{local_ip}:5000")
+print("   👉 Localhost:          http://localhost:5000")
 print("\n📱 Konsollarni jonli ko'rish uchun:")
 print("   - Panel loglari:      tmux attach -t panel")
 print("   - Tunnel loglari:     tmux attach -t tunnel")
