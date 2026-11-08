@@ -102,14 +102,20 @@ time.sleep(1.5)
 panel_dir = os.path.dirname(os.path.abspath(__file__))
 panel_py = os.path.join(panel_dir, "panel.py")
 
+run_panel_sh = os.path.join(panel_dir, "run_panel.sh")
+run_tunnel_sh = os.path.join(panel_dir, "run_tunnel.sh")
+
+try:
+    os.chmod(run_panel_sh, 0o755)
+    os.chmod(run_tunnel_sh, 0o755)
+except Exception:
+    pass
+
 # Grazajon panelni ishga tushirish
-py_bin = sys.executable or "python3"
-cmd_panel = f"cd {panel_dir} && while true; do {py_bin} panel.py; sleep 3; done"
-subprocess.run(["tmux", "new", "-d", "-s", "panel", "bash", "-c", cmd_panel])
+subprocess.run(["tmux", "new", "-d", "-s", "panel", f"bash {run_panel_sh}"])
 
 # Cloudflare tunnelni ishga tushirish
-cmd_tunnel = f"while true; do cloudflared tunnel --config {cfg_file} run; sleep 5; done"
-subprocess.run(["tmux", "new", "-d", "-s", "tunnel", "bash", "-c", cmd_tunnel])
+subprocess.run(["tmux", "new", "-d", "-s", "tunnel", f"bash {run_tunnel_sh}"])
 
 # 5. Xizmat salomatligini tekshirish (Health Check)
 print("\n🔍 Server tekshirilmoqda...")
