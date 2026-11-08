@@ -93,11 +93,11 @@ if not tmux_check:
     subprocess.run(["pkg", "install", "tmux", "-y"])
 
 # Eski qotib qolgan jarayonlarni to'liq to'xtatish
-subprocess.run(["tmux", "kill-session", "-t", "panel"], capture_output=True)
-subprocess.run(["tmux", "kill-session", "-t", "tunnel"], capture_output=True)
+subprocess.run(["tmux", "kill-server"], capture_output=True)
+subprocess.run(["killall", "-9", "cloudflared"], capture_output=True)
+# Faqat boshqa pythonlarni to'xtatish
 subprocess.run(["pkill", "-f", "panel.py"], capture_output=True)
-subprocess.run(["pkill", "-f", "cloudflared"], capture_output=True)
-time.sleep(1.5)
+time.sleep(2)
 
 panel_dir = os.path.dirname(os.path.abspath(__file__))
 panel_py = os.path.join(panel_dir, "panel.py")
